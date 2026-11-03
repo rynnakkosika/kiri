@@ -3,7 +3,8 @@
   'use strict';
   const SAVE_KEY = 'kiri.save';
   const PREFS_KEY = 'kiri.prefs';
-  const SAVE_VERSION = 2;
+  // 3 = harness racing; older cycling saves are ignored.
+  const SAVE_VERSION = 3;
 
   function read(key) {
     try {

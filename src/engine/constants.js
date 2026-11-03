@@ -5,32 +5,46 @@
   Kiri.C = Object.freeze({
     MIN_EFFORT: 1,
     MAX_EFFORT: 9,
-    // Energy cost for effort 1..9 (index 0 unused).
+    // Energy cost for speed 1..9 (index 0 unused).
     EFFORT_COST: [0, 0, 1, 2, 3, 5, 7, 9, 12, 15],
-    // Shelter discount on energy cost, by wind.
-    SHELTER_DISCOUNT: { calm: 0.3, head: 0.5, crossLeft: 0.4, crossRight: 0.4 },
-    // Half-step cost of entering a square, by terrain, with archetype overrides.
-    STEP_COST: { flat: 2, descent: 1, cobbles: 3, climb: 4 },
+
+    // Oval: 40 segments of 25 m. 0–9 home straight, 10–19 curve, 20–29 back straight, 30–39 curve.
+    SEGMENT_M: 25,
+    LAP: 40,
+    FINISH_LAP_POS: 10,
+    LANES: 4,
+    // Half-step cost of entering a segment, by lane (index 0 = lane 1, the rail).
+    STRAIGHT_COST: 2,
+    CURVE_COST: [2, 2, 3, 4],
+
+    // Energy multipliers by position at the start of the turn (rule 4).
+    COVER_MULT: [0.6, 0.7, 0.85, 0.85],
+    OPEN_MULT: [1.0, 1.3, 1.5, 1.7],
+    DEATH_SEAT_MULT: 1.6,
+    WIDE_CURVE_MULT: 1.25,
+    WIDE_FROM_LANE: 2,
+
     ARCHETYPES: {
-      rouleur: { name: 'Rouleur', energy: 110, steps: { cobbles: 2 }, blurb: 'Big engine, at home on cobbles.' },
-      climber: { name: 'Climber', energy: 100, steps: { climb: 3 }, blurb: 'Floats up the climbs.' },
-      sprinter: { name: 'Sprinter', energy: 95, steps: { climb: 5 }, blurb: 'Deadly Kick in the final 12 squares.' },
+      stayer: { name: 'Stayer', energy: 125, blurb: 'Deep reserves. Can afford a lap outside.' },
+      closer: { name: 'Closer', energy: 110, blurb: 'Kick: +2 segments at speed 7+ in the last 300 m.' },
+      gate: { name: 'Gate speed', energy: 110, blurb: 'Fast away: +2 segments in turns 1–2. Grab the lead or the pocket.' },
     },
     KICK_RANGE: 12,
     KICK_MIN_EFFORT: 7,
     KICK_BONUS: 4,
-    DESCENT_RECOVERY: 2,
-    DESCENT_RECOVERY_MAX_EFFORT: 4,
+    GATE_TURNS: 2,
+    GATE_BONUS: 4,
+
     STRAIN_NEUTRAL: 5,
     STRAIN_MAX: 10,
-    STRAIN_AFTER_CRACK: 6,
+    STRAIN_AFTER_CRACK: 5,
     CRACK_TURNS: 2,
     CRACK_MAX_EFFORT: 3,
-    SPRINT_POINTS: [5, 3, 1],
-    FINISH_POINTS: [15, 12, 10, 8, 6, 5, 4, 3, 2, 1],
+    // An exhausted horse (energy 0) may still trot this fast for free.
+    EXHAUSTED_MAX_EFFORT: 3,
+
+    PURSE: [10000, 5000, 2500, 1500, 1000, 800, 600, 400],
     TURN_CAP: 60,
     RUNOFF: 14,
-    WINDS: ['calm', 'head', 'crossLeft', 'crossRight'],
-    WIND_NAMES: { calm: 'Calm', head: 'Headwind', crossLeft: 'Crosswind from the left', crossRight: 'Crosswind from the right' },
   });
 })(window.Kiri = window.Kiri || {});

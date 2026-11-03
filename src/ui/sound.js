@@ -49,11 +49,19 @@
   }
 
   const SOUNDS = {
-    ride(a, t) { noise(a, t, 0.45, 500, 2200, 0.12); },
-    sprint(a, t) { tone(a, 1318, t, 0.25, 'sine', 0.15); tone(a, 1760, t + 0.12, 0.35, 'sine', 0.15); },
+    // Trotting hooves: two-beat clip-clop.
+    ride(a, t) {
+      for (let i = 0; i < 6; i++) {
+        noise(a, t + i * 0.13, 0.05, i % 2 ? 1800 : 1200, i % 2 ? 1500 : 900, 0.18);
+      }
+    },
+    // Last-lap bell.
+    sprint(a, t) { [0, 0.28, 0.56].forEach((d) => tone(a, 1568, t + d, 0.45, 'sine', 0.13)); },
+    // Breaking into a gallop: a rising whinny.
     crack(a, t) {
-      const o = tone(a, 140, t, 0.4, 'triangle', 0.3);
-      o.frequency.exponentialRampToValueAtTime(55, t + 0.4);
+      const o = tone(a, 420, t, 0.55, 'sawtooth', 0.06);
+      o.frequency.exponentialRampToValueAtTime(900, t + 0.25);
+      o.frequency.exponentialRampToValueAtTime(500, t + 0.55);
     },
     finish(a, t) {
       [523, 659, 784, 1046].forEach((f, i) => tone(a, f, t + i * 0.06, 0.9, 'sine', 0.08));

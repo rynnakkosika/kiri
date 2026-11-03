@@ -1,15 +1,12 @@
-// Canvas renderer: track strip, stage profile, riders, ghosts and move animation.
+// Canvas renderer: the whole oval, horses with sulkies, ghosts, trails and move animation.
 (function (Kiri) {
   'use strict';
+  const C = Kiri.C;
 
-  const TERRAIN = {
-    flat: { road: '#5a5e62', mark: null },
-    climb: { road: '#7a5d44', mark: '#e7b98a' },
-    descent: { road: '#46607a', mark: '#a9cbe8' },
-    cobbles: { road: '#7b766b', mark: '#a59f92' },
-  };
-  const GRASS = '#5b8a47';
-  const GRASS_DARK = '#4c7a3b';
+  const COATS = ['#7a4a2a', '#5b3420', '#2b1d16', '#9a5b2e', '#8c8c86', '#6b3d22'];
+  const SAND = '#c89a6a';
+  const SAND_DARK = '#b8875a';
+  const INFIELD = '#5f9150';
 
   function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
@@ -23,16 +20,10 @@
       this.human = 0;
       this.ghosts = [];
       this.selected = null;
-      this.camX = -6;
-      this.follow = true;
       this.anim = null;
-      this.pos = {}; // riderId -> {x: squares, y: lane} as drawn
-      this.motion = {}; // riderId -> {vx, vy, pedal} for sprite animation
-      this.trails = []; // last turn's moves: {id, from, to}
-      this.cell = 46;
-      this.lane = 38;
-      this.particles = [];
-      this.hover = null;
+      this.pos = {}; // riderId -> {x: segment, y: lane} as drawn
+      this.motion = {}; // riderId -> {moving, stride}
+      this.trails = [];
       this.onHover = null;
       this.time = 0;
       this.bindInput();
@@ -47,9 +38,6 @@
       this.human = humanTeam;
       if (!this.anim) for (const r of state.riders) this.pos[r.id] = { x: r.square, y: r.lane };
       this.trails = this.lastMoves(state);
-      this.buildScenery();
-      // Start with the camera already on our riders instead of panning from the start line.
-      if (this.camTarget === undefined) this.camX = this.camTarget = this.focusSquare() - this.visibleSquares() / 2;
     }
 
     lastMoves(state) {
@@ -57,31 +45,16 @@
         .map((e) => ({ id: e.rider, from: { x: e.from, y: e.fromLane }, to: { x: e.to, y: e.lane } }));
     }
 
-    buildScenery() {
-      if (this.scenery && this.scenery.stage === this.state.stage) return;
-      const rand = Kiri.rng(this.state.stage.squares.length * 7919 + this.state.stage.finish);
-      const items = [];
-      for (let i = -12; i < this.state.stage.squares.length + 4; i++) {
-        if (rand() < 0.35) items.push({ x: i + rand(), side: rand() < 0.5 ? -1 : 1, d: rand(), kind: rand() < 0.75 ? 'tree' : 'rock' });
-        const near = Math.abs(i - this.state.stage.finish) < 8 || Math.abs(i - this.state.stage.sprint) < 3;
-        if (near && rand() < 0.9) items.push({ x: i + rand(), side: rand() < 0.5 ? -1 : 1, d: rand() * 0.25, kind: 'fan', hue: Math.floor(rand() * 360) });
-      }
-      this.scenery = { stage: this.state.stage, items };
-    }
-
     setGhosts(ghosts, selected) { this.ghosts = ghosts; this.selected = selected; }
 
-    centerOn(square) { this.follow = false; this.camTarget = square - this.visibleSquares() / 2; }
-    refollow() { this.follow = true; }
+    // The whole oval is always in view; kept for API compatibility with the race screen.
+    refollow() {}
 
-    visibleSquares() { return this.c.clientWidth / this.cell; }
-
-    // Animate from the current drawn positions to newState, one rider after another in resolution order.
     animateTo(newState, done) {
       const entries = newState.log.filter((e) => e.turn === newState.turn - 1);
       const tracks = entries.map((e, i) => {
         const dist = Math.max(1, e.to - e.from);
-        return { id: e.rider, from: { x: e.from, y: e.fromLane }, to: { x: e.to, y: e.lane }, delay: i * 70, dur: Math.min(750, 280 + dist * 30) };
+        return { id: e.rider, from: { x: e.from, y: e.fromLane }, to: { x: e.to, y: e.lane }, delay: i * 45, dur: Math.min(900, 320 + dist * 45) };
       });
       const total = tracks.reduce((m, t) => Math.max(m, t.delay + t.dur), 0);
       this.trails = this.lastMoves(newState);
@@ -97,7 +70,7 @@
       this.anim = null;
       this.state = a.next;
       for (const r of this.state.riders) this.pos[r.id] = { x: r.square, y: r.lane };
-      for (const id in this.motion) { this.motion[id].vx = 0; this.motion[id].vy = 0; }
+      for (const id in this.motion) this.motion[id].moving = false;
       a.done();
     }
 
@@ -107,63 +80,21 @@
       for (const tr of a.tracks) {
         const k = ease(Math.max(0, Math.min(1, (t - tr.delay) / tr.dur)));
         const next = { x: tr.from.x + (tr.to.x - tr.from.x) * k, y: tr.from.y + (tr.to.y - tr.from.y) * k };
-        const prev = this.pos[tr.id];
-        const m = this.motion[tr.id] || (this.motion[tr.id] = { vx: 0, vy: 0, pedal: 0 });
-        m.vx = next.x - prev.x;
-        m.vy = next.y - prev.y;
-        m.pedal += m.vx * 5 + (m.vx > 0.001 ? 0.12 : 0);
+        const m = this.motion[tr.id] || (this.motion[tr.id] = { moving: false, stride: 0 });
+        const dx = next.x - this.pos[tr.id].x;
+        m.moving = dx > 0.0005;
+        m.stride += dx * 9 + (m.moving ? 0.15 : 0);
         this.pos[tr.id] = next;
       }
       if (t >= a.total) this.finishAnim();
     }
 
-    focusSquare() {
-      const s = this.state;
-      const mine = s.riders.filter((r) => r.team === this.human && !r.finished);
-      const list = mine.length ? mine : s.riders.filter((r) => !r.finished);
-      if (!list.length) return s.stage.finish;
-      const xs = list.map((r) => this.pos[r.id].x);
-      const lo = Math.min.apply(null, xs);
-      const hi = Math.max.apply(null, xs);
-      const vis = this.visibleSquares();
-      // Keep both own riders in view; lean forward so the road ahead shows.
-      return hi - lo < vis * 0.6 ? (lo + hi) / 2 + vis * 0.12 : hi;
-    }
-
     bindInput() {
-      let drag = null;
-      this.c.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, cam: this.camX, moved: false }; this.c.classList.add('dragging'); this.c.setPointerCapture(e.pointerId); });
-      this.c.addEventListener('pointermove', (e) => {
-        if (drag && Math.abs(e.clientX - drag.x) > 5) {
-          drag.moved = true;
-          this.follow = false;
-          this.camX = drag.cam - (e.clientX - drag.x) / this.cell;
-          this.camTarget = this.camX;
-        }
-        if (e.pointerType === 'mouse') this.updateHover(e);
-      });
-      // A tap (no drag) inspects the rider under the finger; touch has no hover.
-      this.c.addEventListener('pointerup', (e) => {
-        if (drag && !drag.moved && e.pointerType !== 'mouse') this.updateHover(e);
-        drag = null;
-        this.c.classList.remove('dragging');
-      });
-      this.c.addEventListener('pointercancel', () => { drag = null; this.c.classList.remove('dragging'); });
+      this.c.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') this.updateHover(e); });
+      // A tap inspects the horse under the finger; touch has no hover.
+      this.c.addEventListener('pointerup', (e) => { if (e.pointerType !== 'mouse') this.updateHover(e); });
       this.c.addEventListener('pointerleave', (e) => {
-        if (e.pointerType !== 'mouse') return;
-        this.hover = null;
-        if (this.onHover) this.onHover(null);
-      });
-      this.c.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        this.follow = false;
-        this.camTarget = (this.camTarget !== undefined ? this.camTarget : this.camX) + (e.deltaY + e.deltaX) / this.cell * 0.6;
-      }, { passive: false });
-      this.p.addEventListener('click', (e) => {
-        if (!this.state) return;
-        const rect = this.p.getBoundingClientRect();
-        const n = this.state.stage.squares.length;
-        this.centerOn(((e.clientX - rect.left) / rect.width) * (n + 6) - 6);
+        if (e.pointerType === 'mouse' && this.onHover) this.onHover(null);
       });
     }
 
@@ -173,25 +104,51 @@
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
       let hit = null;
+      let best = (this.geo.seg * 0.7) ** 2;
       for (const r of this.state.riders) {
-        const p = this.screen(this.pos[r.id]);
-        if ((p.x - mx) ** 2 + (p.y - my) ** 2 < 15 * 15) hit = r;
+        const p = this.place(this.pos[r.id]);
+        const d = (p.x - mx) ** 2 + (p.y - my) ** 2;
+        if (d < best) { best = d; hit = r; }
       }
-      this.hover = hit;
       if (this.onHover) this.onHover(hit, mx, my);
     }
 
-    roadTop() { return (this.c.clientHeight - 3 * this.lane) / 2; }
+    // Oval geometry fitted to the canvas: segment length s, rail radius R0, lane width lw.
+    layout() {
+      const W = this.c.clientWidth;
+      const H = this.c.clientHeight;
+      // Total width = 10s (straight) + 2(R0 + 4lw) + margins, with R0 = 10s/π and lw = 0.75s.
+      const wUnits = 10 + 2 * (10 / Math.PI + 4 * 0.75) + 1.2;
+      // Height leaves room below the oval for the grandstand.
+      const hUnits = 2 * (10 / Math.PI + 4 * 0.75) + 3.4;
+      const s = Math.min(W / wUnits, H / hUnits);
+      const R0 = (10 * s) / Math.PI;
+      this.geo = { seg: s, R0, lw: 0.75 * s, cx: W / 2, cy: H / 2 - s * 0.9, hl: 5 * s, W, H };
+    }
 
-    screen(pos) {
-      return { x: (pos.x - this.camX) * this.cell + this.cell / 2, y: this.roadTop() + pos.y * this.lane + this.lane / 2 };
+    // Lap position (in segments, fractional) and lane (fractional) → screen point and heading.
+    lapPoint(p, lane) {
+      const g = this.geo;
+      const r = g.R0 + (lane + 0.5) * g.lw;
+      p = ((p % C.LAP) + C.LAP) % C.LAP;
+      if (p < 10) return { x: g.cx - g.hl + (p / 10) * 2 * g.hl, y: g.cy + r, a: 0 };
+      if (p < 20) {
+        const th = Math.PI / 2 - ((p - 10) / 10) * Math.PI;
+        return { x: g.cx + g.hl + r * Math.cos(th), y: g.cy + r * Math.sin(th), a: th - Math.PI / 2 };
+      }
+      if (p < 30) return { x: g.cx + g.hl - ((p - 20) / 10) * 2 * g.hl, y: g.cy - r, a: Math.PI };
+      const th = -Math.PI / 2 - ((p - 30) / 10) * Math.PI;
+      return { x: g.cx - g.hl + r * Math.cos(th), y: g.cy + r * Math.sin(th), a: th - Math.PI / 2 };
+    }
+
+    // Segment index → middle of that segment on the oval.
+    place(pos) {
+      const race = this.state.stage;
+      return this.lapPoint(race.startOffset + pos.x + 0.5, pos.y);
     }
 
     resize() {
       const dpr = window.devicePixelRatio || 1;
-      const phone = this.c.clientWidth < 700;
-      this.cell = phone ? 34 : 46;
-      this.lane = phone ? 30 : 38;
       for (const cv of [this.c, this.p]) {
         const w = Math.round(cv.clientWidth * dpr);
         const h = Math.round(cv.clientHeight * dpr);
@@ -199,372 +156,286 @@
       }
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.layout();
     }
 
     frame(now) {
       if (!this.state) return;
       this.resize();
       if (this.anim) this.stepAnim(now);
-      const vis = this.visibleSquares();
-      if (this.follow) this.camTarget = this.focusSquare() - vis / 2;
-      const maxCam = this.state.stage.squares.length - vis + 1;
-      this.camTarget = Math.max(-8, Math.min(maxCam, this.camTarget));
-      this.camX += (this.camTarget - this.camX) * 0.12;
       this.drawTrack();
-      this.drawProfile();
+      this.drawTrails();
+      this.drawGhosts();
+      this.drawHorses();
+      this.drawProgress();
+    }
+
+    // Stadium shape at radius r around the oval centre.
+    ovalPath(ctx, r) {
+      const g = this.geo;
+      ctx.beginPath();
+      ctx.moveTo(g.cx - g.hl, g.cy + r);
+      ctx.lineTo(g.cx + g.hl, g.cy + r);
+      ctx.arc(g.cx + g.hl, g.cy, r, Math.PI / 2, -Math.PI / 2, true);
+      ctx.lineTo(g.cx - g.hl, g.cy - r);
+      ctx.arc(g.cx - g.hl, g.cy, r, -Math.PI / 2, Math.PI / 2, true);
+      ctx.closePath();
     }
 
     drawTrack() {
       const ctx = this.ctx;
-      const W = this.c.clientWidth;
-      const H = this.c.clientHeight;
-      const s = this.state;
-      const top = this.roadTop();
-      ctx.fillStyle = GRASS;
-      ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = GRASS_DARK;
-      ctx.fillRect(0, top - 10, W, 10);
-      ctx.fillRect(0, top + 3 * this.lane, W, 10);
-
-      const first = Math.floor(this.camX) - 1;
-      const last = Math.ceil(this.camX + W / this.cell) + 1;
-      this.drawScenery(top, first, last, false);
-
-      for (let i = first; i <= last; i++) {
-        if (i >= s.stage.squares.length) continue;
-        const sq = Kiri.squareAt(s.stage, i);
-        const x = (i - this.camX) * this.cell;
-        const t = TERRAIN[sq.terrain];
-        for (let l = 0; l < 3; l++) {
-          const y = top + l * this.lane;
-          if (l >= sq.width) {
-            ctx.fillStyle = GRASS_DARK;
-            ctx.fillRect(x, y, this.cell + 1, this.lane);
-            continue;
-          }
-          ctx.fillStyle = t.road;
-          ctx.fillRect(x, y, this.cell + 1, this.lane);
-          if (sq.terrain === 'cobbles') {
-            ctx.fillStyle = t.mark;
-            for (let k = 0; k < 6; k++) {
-              ctx.beginPath();
-              ctx.ellipse(x + 6 + (k % 3) * 15 + (Math.floor(k / 3) % 2) * 7, y + 10 + Math.floor(k / 3) * 17, 5, 4, 0, 0, Math.PI * 2);
-              ctx.fill();
-            }
-          } else if (t.mark) {
-            ctx.strokeStyle = t.mark;
-            ctx.globalAlpha = 0.55;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            const cx = x + this.cell / 2;
-            const cy = y + this.lane / 2;
-            if (sq.terrain === 'climb') { ctx.moveTo(cx - 6, cy + 4); ctx.lineTo(cx, cy - 4); ctx.lineTo(cx + 6, cy + 4); } else { ctx.moveTo(cx - 4, cy - 6); ctx.lineTo(cx + 4, cy); ctx.lineTo(cx - 4, cy + 6); }
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-          }
-        }
-        // Square separators and lane dashes.
-        ctx.strokeStyle = 'rgba(255,255,255,.10)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x + 0.5, top);
-        ctx.lineTo(x + 0.5, top + sq.width * this.lane);
-        ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,255,255,.45)';
-        ctx.setLineDash([10, 8]);
-        ctx.beginPath();
-        for (let l = 1; l < sq.width; l++) { ctx.moveTo(x, top + l * this.lane); ctx.lineTo(x + this.cell, top + l * this.lane); }
-        ctx.stroke();
-        ctx.setLineDash([]);
-        // Distance markers every 5 squares.
-        const toGo = s.stage.finish - i;
-        if (i >= 0 && toGo > 0 && toGo % 5 === 0) {
-          ctx.fillStyle = 'rgba(255,255,255,.75)';
-          ctx.font = '600 11px "Segoe UI", sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(toGo + '', x + this.cell / 2, top + 3 * this.lane + 24);
-        }
+      const g = this.geo;
+      const race = this.state.stage;
+      ctx.fillStyle = '#4f7f42';
+      ctx.fillRect(0, 0, g.W, g.H);
+      const outer = g.R0 + C.LANES * g.lw;
+      // Track surface.
+      this.ovalPath(ctx, outer + g.lw * 0.35);
+      ctx.fillStyle = SAND;
+      ctx.fill();
+      this.ovalPath(ctx, g.R0 - g.lw * 0.1);
+      ctx.fillStyle = INFIELD;
+      ctx.fill();
+      // Infield: a pond and the totalisator board, just for looks.
+      ctx.fillStyle = '#6aa0c8';
+      ctx.beginPath(); ctx.ellipse(g.cx + g.hl * 0.45, g.cy, g.R0 * 0.35, g.R0 * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2e3a2c';
+      ctx.fillRect(g.cx - g.hl * 0.6, g.cy - g.R0 * 0.18, g.hl * 0.6, g.R0 * 0.36);
+      ctx.fillStyle = '#ffd84d';
+      ctx.font = '700 ' + Math.max(9, g.seg * 0.36) + 'px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(race.name.toUpperCase() + ' · ' + race.meters + ' m', g.cx - g.hl * 0.3, g.cy);
+      ctx.textBaseline = 'alphabetic';
+      // Lane lines and harrowing stripes.
+      ctx.strokeStyle = SAND_DARK;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([g.seg * 0.25, g.seg * 0.35]);
+      for (let l = 1; l < C.LANES; l++) { this.ovalPath(ctx, g.R0 + l * g.lw); ctx.stroke(); }
+      ctx.setLineDash([]);
+      // Rails.
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      this.ovalPath(ctx, g.R0 - g.lw * 0.1); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,.75)';
+      ctx.lineWidth = 2;
+      this.ovalPath(ctx, outer + g.lw * 0.35); ctx.stroke();
+      // Grandstand along the home straight with a bobbing crowd.
+      const gy = g.cy + outer + g.lw * 0.9;
+      ctx.fillStyle = '#3b3f45';
+      ctx.fillRect(g.cx - g.hl * 0.9, gy, g.hl * 1.8, Math.min(g.lw * 2.2, g.H - gy - 2));
+      for (let i = 0; i < 46; i++) {
+        const x = g.cx - g.hl * 0.86 + (i / 46) * g.hl * 1.72;
+        const bob = Math.sin(this.time / 260 + i * 1.7) * 1.2;
+        ctx.fillStyle = 'hsl(' + ((i * 47) % 360) + ',55%,60%)';
+        ctx.beginPath(); ctx.arc(x, gy + g.lw * 0.55 + (i % 2) * g.lw * 0.6 + bob, Math.max(1.5, g.lw * 0.18), 0, Math.PI * 2); ctx.fill();
       }
-
-      this.drawLine(s.stage.sprint, top, 'sprint');
-      this.drawLine(s.stage.finish, top, 'finish');
-      this.drawLine(0, top, 'start');
-      this.drawTrails();
-      this.drawGhosts();
-      this.drawRiders();
-      this.drawScenery(top, first, last, true);
-      this.drawWind(W, H);
+      this.drawPost(Kiri.C.FINISH_LAP_POS, 'FINISH', '#111');
+      this.drawPost(race.startOffset, 'START', '#1f6fd0');
+      this.drawLapBoard();
     }
 
-    drawScenery(top, first, last, front) {
+    drawPost(lapPos, label, color) {
       const ctx = this.ctx;
-      for (const it of this.scenery.items) {
-        if (it.x < first - 1 || it.x > last + 1) continue;
-        if ((it.side > 0) !== front) continue;
-        const x = (it.x - this.camX) * this.cell;
-        const y = it.side < 0 ? top - 22 - it.d * 50 : top + 3 * this.lane + 34 + it.d * 50;
-        if (it.kind === 'tree') {
-          ctx.fillStyle = 'rgba(0,0,0,.18)';
-          ctx.beginPath(); ctx.ellipse(x + 4, y + 10, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#2f5e2a';
-          ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#3c7335';
-          ctx.beginPath(); ctx.arc(x - 3, y - 3, 8, 0, Math.PI * 2); ctx.fill();
-        } else if (it.kind === 'rock') {
-          ctx.fillStyle = '#8b8a83';
-          ctx.beginPath(); ctx.ellipse(x, y, 7, 5, 0.3, 0, Math.PI * 2); ctx.fill();
-        } else {
-          const bob = Math.sin(this.time / 180 + it.x * 3) * 1.5;
-          ctx.fillStyle = 'hsl(' + it.hue + ',60%,55%)';
-          ctx.beginPath(); ctx.arc(x, y + bob, 5, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#f1d1b5';
-          ctx.beginPath(); ctx.arc(x, y - 7 + bob, 3.2, 0, Math.PI * 2); ctx.fill();
+      const g = this.geo;
+      const a = this.lapPoint(lapPos, -0.6);
+      const b = this.lapPoint(lapPos, C.LANES - 0.3);
+      if (label === 'FINISH') {
+        const n = 8;
+        for (let i = 0; i < n; i++) {
+          ctx.strokeStyle = i % 2 ? '#fff' : '#111';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n);
+          ctx.lineTo(a.x + ((b.x - a.x) * (i + 1)) / n, a.y + ((b.y - a.y) * (i + 1)) / n);
+          ctx.stroke();
         }
-      }
-    }
-
-    drawLine(square, top, kind) {
-      const ctx = this.ctx;
-      const x = (square - this.camX) * this.cell;
-      if (x < -60 || x > this.c.clientWidth + 60) return;
-      const h = 3 * this.lane;
-      if (kind === 'finish') {
-        for (let k = 0; k < 12; k++) {
-          for (let j = 0; j < 2; j++) {
-            ctx.fillStyle = (k + j) % 2 ? '#fff' : '#111';
-            ctx.fillRect(x + j * 5 - 5, top + k * (h / 12), 5, h / 12);
-          }
-        }
-      } else if (kind === 'sprint') {
-        ctx.fillStyle = '#3ddc84';
-        ctx.fillRect(x - 3, top, 6, h);
       } else {
-        ctx.fillStyle = 'rgba(255,255,255,.8)';
-        ctx.fillRect(x - 2, top, 4, h);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.setLineDash([]);
       }
-      if (kind !== 'start') {
-        const label = kind === 'finish' ? 'FINISH' : 'SPRINT 5·3·1';
-        ctx.font = '800 11px "Segoe UI", sans-serif';
-        const w = ctx.measureText(label).width + 14;
-        ctx.fillStyle = kind === 'finish' ? '#111' : '#1f9d57';
-        ctx.fillRect(x - w / 2, top - 34, w, 18);
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.fillText(label, x, top - 21);
-        ctx.fillStyle = '#ddd';
-        ctx.fillRect(x - w / 2, top - 16, 2, 6);
-        ctx.fillRect(x + w / 2 - 2, top - 16, 2, 6);
-      }
+      const t = this.lapPoint(lapPos, -1.6);
+      ctx.font = '800 ' + Math.max(9, g.seg * 0.32) + 'px "Segoe UI", sans-serif';
+      const w = ctx.measureText(label).width + 10;
+      ctx.fillStyle = color;
+      ctx.fillRect(t.x - w / 2, t.y - 8, w, 16);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, t.x, t.y + 4);
+    }
+
+    drawLapBoard() {
+      const ctx = this.ctx;
+      const g = this.geo;
+      const s = this.state;
+      const live = s.riders.filter((r) => !r.finished);
+      const lead = live.length ? Math.max.apply(null, live.map((r) => r.square)) : s.stage.finish;
+      const toGo = Math.max(0, (s.stage.finish - lead) * C.SEGMENT_M);
+      const text = live.length ? toGo + ' m to go' : 'All home';
+      ctx.font = '700 ' + Math.max(10, g.seg * 0.36) + 'px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(text, g.cx - g.hl * 0.3, g.cy + g.R0 * 0.18 + Math.max(12, g.seg * 0.45));
     }
 
     teamColor(r) { return this.state.teams[r.team].color; }
 
-    drawGhosts() {
-      const ctx = this.ctx;
-      if (this.anim) return;
-      for (const g of this.ghosts) {
-        const r = this.state.riders[g.id];
-        const from = this.screen(this.pos[r.id]);
-        const p = this.screen({ x: g.square, y: g.lane });
-        ctx.strokeStyle = this.teamColor(r);
-        ctx.globalAlpha = g.id === this.selected ? 0.95 : 0.55;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(from.x + 16, from.y);
-        ctx.quadraticCurveTo((from.x + p.x) / 2, Math.min(from.y, p.y) - 18, p.x - 16, p.y);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#fff';
-        ctx.font = '800 11px "Segoe UI", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(g.label, p.x, p.y + 4);
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    drawRiders() {
-      const ctx = this.ctx;
-      const s = this.state;
-      const sorted = s.riders.slice().sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1));
-      for (const r of sorted) {
-        const p = this.screen(this.pos[r.id]);
-        if (p.x < -30 || p.x > this.c.clientWidth + 30) continue;
-        const mine = r.team === this.human;
-        ctx.globalAlpha = r.finished && !this.anim ? 0.55 : 1;
-        if (mine && r.id === this.selected && !this.anim) {
-          ctx.strokeStyle = '#ffd84d';
-          ctx.lineWidth = 3;
-          ctx.globalAlpha = 0.5 + 0.4 * Math.sin(this.time / 220);
-          ctx.beginPath(); ctx.ellipse(p.x, p.y, 23 * this.cell / 46, 15, 0, 0, Math.PI * 2); ctx.stroke();
-          ctx.globalAlpha = 1;
-        }
-        this.drawCyclist(ctx, p, r, mine);
-        if (r.crack > 0 && !r.finished) {
-          ctx.fillStyle = '#e03131';
-          ctx.beginPath(); ctx.arc(p.x + 10, p.y - 12, 6, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#fff';
-          ctx.font = '900 9px "Segoe UI", sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText('!', p.x + 10, p.y - 9);
-        }
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    // Top-down cyclist facing right: wheels, pedaling legs, jersey, arms, helmet, back number.
-    drawCyclist(ctx, p, r, mine) {
-      const m = this.motion[r.id] || { vx: 0, vy: 0, pedal: 0 };
-      const k = (this.cell / 46) * 1.2;
-      const color = this.teamColor(r);
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.fillStyle = 'rgba(0,0,0,.28)';
-      ctx.beginPath(); ctx.ellipse(2, 5, 18 * k, 6, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.rotate(Math.max(-0.5, Math.min(0.5, m.vy * 2.5)));
-      ctx.scale(k, k);
-      ctx.lineCap = 'round';
-      // Wheels and frame.
-      ctx.strokeStyle = '#1b1d20';
-      ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(-8, 0); ctx.moveTo(8, 0); ctx.lineTo(18, 0); ctx.stroke();
-      ctx.strokeStyle = '#c9ccd1';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(13, 0); ctx.stroke();
-      // Legs: knees swing forward and back in opposite phase.
-      const ph = m.pedal;
-      ctx.strokeStyle = '#26282c';
-      ctx.lineWidth = 3.4;
-      for (const side of [-1, 1]) {
-        const knee = Math.cos(ph + (side > 0 ? Math.PI : 0)) * 4;
-        ctx.beginPath(); ctx.moveTo(-4, side * 3.5); ctx.lineTo(1 + knee, side * 6); ctx.lineTo(-1 + knee * 0.6, side * 3); ctx.stroke();
-      }
-      // Arms to the handlebars.
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(1, -5); ctx.lineTo(11, -5.5); ctx.moveTo(1, 5); ctx.lineTo(11, 5.5); ctx.stroke();
-      ctx.strokeStyle = '#1b1d20';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath(); ctx.moveTo(11, -7); ctx.lineTo(11, 7); ctx.stroke();
-      // Jersey.
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.ellipse(-3, 0, 9.5, 7.5, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = mine ? '#ffd84d' : 'rgba(255,255,255,.85)';
-      ctx.lineWidth = mine ? 2.6 : 1.4;
-      ctx.stroke();
-      // Helmet.
-      ctx.fillStyle = mine ? '#ffd84d' : '#f4f4f4';
-      ctx.beginPath(); ctx.ellipse(6, 0, 5, 4.4, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = color;
-      ctx.fillRect(3, -1, 6, 2);
-      // Back number.
-      ctx.fillStyle = '#fff';
-      ctx.font = '800 9px "Segoe UI", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(r.id + 1), -4.5, 0.5);
-      ctx.restore();
-      ctx.textBaseline = 'alphabetic';
-    }
-
     drawTrails() {
       const ctx = this.ctx;
       ctx.lineCap = 'round';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = Math.max(2, this.geo.lw * 0.25);
       for (const t of this.trails) {
-        if (t.to.x === t.from.x && t.to.y === t.from.y) continue;
-        const a = this.screen(t.from);
-        const b = this.screen(this.pos[t.id]);
-        if (Math.max(a.x, b.x) < -20 || Math.min(a.x, b.x) > this.c.clientWidth + 20) continue;
-        const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-        const col = this.teamColor(this.state.riders[t.id]);
-        g.addColorStop(0, 'rgba(255,255,255,0)');
-        g.addColorStop(1, col);
-        ctx.strokeStyle = g;
-        ctx.globalAlpha = 0.45;
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x - 12, b.y); ctx.stroke();
+        if (t.to.x === t.from.x) continue;
+        const end = this.pos[t.id].x;
+        const steps = Math.max(2, Math.ceil((end - t.from.x) * 3));
+        ctx.strokeStyle = this.teamColor(this.state.riders[t.id]);
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        for (let i = 0; i <= steps; i++) {
+          const k = i / steps;
+          const pt = this.place({ x: t.from.x + (end - t.from.x) * k, y: t.from.y + (this.pos[t.id].y - t.from.y) * k });
+          if (i === 0) ctx.moveTo(pt.x, pt.y); else ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.stroke();
       }
       ctx.globalAlpha = 1;
     }
 
-    drawWind(W, H) {
-      const wind = this.state.wind;
-      if (wind === 'calm') return;
+    drawGhosts() {
+      if (this.anim) return;
       const ctx = this.ctx;
-      const dir = { head: [-1, 0], crossLeft: [0, 1], crossRight: [0, -1] }[wind];
-      while (this.particles.length < 26) {
-        this.particles.push({ x: Math.random() * W, y: Math.random() * H, life: Math.random() });
+      const g = this.geo;
+      for (const gh of this.ghosts) {
+        const r = this.state.riders[gh.id];
+        const p = this.place({ x: gh.square, y: gh.lane });
+        ctx.strokeStyle = this.teamColor(r);
+        ctx.globalAlpha = gh.id === this.selected ? 0.95 : 0.55;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.arc(p.x, p.y, g.lw * 0.62, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#fff';
+        ctx.font = '800 ' + Math.max(9, g.lw * 0.6) + 'px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(gh.label, p.x, p.y + 4);
+        ctx.globalAlpha = 1;
       }
-      ctx.strokeStyle = 'rgba(255,255,255,.35)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      for (const pt of this.particles) {
-        pt.x += dir[0] * 4 + (dir[1] ? 1.2 : 0);
-        pt.y += dir[1] * 3;
-        pt.life -= 0.006;
-        if (pt.life <= 0 || pt.x < -20 || pt.y < -20 || pt.y > H + 20) {
-          pt.x = dir[0] < 0 ? W + Math.random() * 40 : Math.random() * W;
-          pt.y = dir[1] > 0 ? -10 : dir[1] < 0 ? H + 10 : Math.random() * H;
-          pt.life = 1;
-        }
-        ctx.moveTo(pt.x, pt.y);
-        ctx.lineTo(pt.x - dir[0] * 16, pt.y - dir[1] * 12);
-      }
-      ctx.stroke();
     }
 
-    drawProfile() {
+    drawHorses() {
+      const s = this.state;
+      // Draw back-to-front so horses further round overlap the ones behind.
+      const order = s.riders.slice().sort((a, b) => this.pos[a.id].x - this.pos[b.id].x);
+      for (const r of order) {
+        const p = this.place(this.pos[r.id]);
+        this.ctx.globalAlpha = r.finished && !this.anim ? 0.5 : 1;
+        this.drawHorse(this.ctx, p, r);
+        this.ctx.globalAlpha = 1;
+      }
+    }
+
+    // Top-down trotter pulling a sulky, facing along the track.
+    drawHorse(ctx, p, r) {
+      const g = this.geo;
+      const mine = r.team === this.human;
+      const m = this.motion[r.id] || { moving: false, stride: 0 };
+      const k = g.seg / 34;
+      const color = this.teamColor(r);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.a);
+      ctx.scale(k, k);
+      if (mine && r.id === this.selected && !this.anim) {
+        ctx.strokeStyle = '#ffd84d';
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.5 + 0.4 * Math.sin(this.time / 220);
+        ctx.beginPath(); ctx.ellipse(-4, 0, 27, 12, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = r.finished && !this.anim ? 0.5 : 1;
+      }
+      ctx.lineCap = 'round';
+      // Sulky: shafts, wheels, seat with driver in stable colours.
+      ctx.strokeStyle = '#d9d9d9';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-12, -5); ctx.lineTo(4, -4); ctx.moveTo(-12, 5); ctx.lineTo(4, 4); ctx.stroke();
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-19, -8); ctx.lineTo(-13, -8); ctx.moveTo(-19, 8); ctx.lineTo(-13, 8); ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.ellipse(-17, 0, 5, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = mine ? '#ffd84d' : '#f2f2f2';
+      ctx.beginPath(); ctx.arc(-15, 0, 3, 0, Math.PI * 2); ctx.fill();
+      // Legs: diagonal pairs move together at the trot.
+      const ph = m.stride;
+      ctx.strokeStyle = '#2a1a10';
+      ctx.lineWidth = 2;
+      const legs = [[10, -4, 0], [10, 4, Math.PI], [-1, -4, Math.PI], [-1, 4, 0]];
+      for (const [lx, ly, off] of legs) {
+        const swing = Math.sin(ph + off) * 3.5;
+        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + swing, ly * 1.35); ctx.stroke();
+      }
+      // Body, neck and head.
+      const coat = COATS[r.id % COATS.length];
+      ctx.fillStyle = coat;
+      ctx.beginPath(); ctx.ellipse(4, 0, 10, 4.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(15, 0, 4.5, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(20, 0, 3.2, 2, 0, 0, Math.PI * 2); ctx.fill();
+      // Saddle pad with the start number in stable colours.
+      ctx.fillStyle = color;
+      ctx.fillRect(0, -4.2, 7, 8.4);
+      ctx.strokeStyle = mine ? '#ffd84d' : '#fff';
+      ctx.lineWidth = mine ? 1.6 : 0.8;
+      ctx.strokeRect(0, -4.2, 7, 8.4);
+      ctx.rotate(-p.a);
+      ctx.fillStyle = '#fff';
+      ctx.font = '800 7px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const nx = Math.cos(p.a) * 3.5;
+      const ny = Math.sin(p.a) * 3.5;
+      ctx.fillText(String(r.id + 1), nx, ny + 0.5);
+      ctx.textBaseline = 'alphabetic';
+      ctx.restore();
+      if (r.crack > 0 && !r.finished) {
+        ctx.fillStyle = '#e03131';
+        ctx.beginPath(); ctx.arc(p.x, p.y - g.lw * 0.9, Math.max(5, g.lw * 0.3), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '900 ' + Math.max(8, g.lw * 0.4) + 'px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('!', p.x, p.y - g.lw * 0.9 + 3);
+      }
+    }
+
+    // Progress strip: every horse by distance covered, with the finish at the right.
+    drawProgress() {
       const ctx = this.pctx;
       const W = this.p.clientWidth;
       const H = this.p.clientHeight;
       const s = this.state;
-      const n = s.stage.squares.length;
-      const span = n + 6;
-      const sx = (i) => ((i + 6) / span) * W;
-      const heights = [0];
-      let h = 0;
-      for (let i = 0; i < n; i++) {
-        const t = s.stage.squares[i].terrain;
-        h += t === 'climb' ? 1 : t === 'descent' ? -1 : 0;
-        heights.push(h);
-      }
-      const lo = Math.min.apply(null, heights);
-      const hi = Math.max.apply(null, heights);
-      const sy = (v) => H - 10 - ((v - lo) / Math.max(1, hi - lo)) * (H - 26);
       const css = getComputedStyle(document.documentElement);
+      const pad = 14;
+      const sx = (sq) => pad + ((sq + 4) / (s.stage.finish + 4)) * (W - 2 * pad);
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = css.getPropertyValue('--chip');
-      ctx.beginPath();
-      ctx.moveTo(0, H);
-      ctx.lineTo(0, sy(0));
-      for (let i = 0; i < n; i++) ctx.lineTo(sx(i + 1), sy(heights[i + 1]));
-      ctx.lineTo(W, H);
-      ctx.fill();
-      for (let i = 0; i < n; i++) {
-        const t = s.stage.squares[i].terrain;
-        if (t === 'flat') continue;
-        ctx.strokeStyle = t === 'climb' ? '#c26a2b' : t === 'descent' ? '#3f7fbf' : '#8a8376';
-        ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(sx(i), sy(heights[i])); ctx.lineTo(sx(i + 1), sy(heights[i + 1])); ctx.stroke();
+      ctx.fillRect(pad, H / 2 - 3, W - 2 * pad, 6);
+      // Lap marks every 1000 m before the finish.
+      ctx.fillStyle = css.getPropertyValue('--muted');
+      ctx.font = '600 10px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      for (let back = C.LAP; back < s.stage.finish; back += C.LAP) {
+        const x = sx(s.stage.finish - back);
+        ctx.fillRect(x - 0.5, H / 2 - 8, 1, 16);
+        ctx.fillText((back * C.SEGMENT_M) + ' m', x, H - 4);
       }
-      ctx.fillStyle = '#1f9d57';
-      ctx.fillRect(sx(s.stage.sprint) - 1, 4, 2, H - 8);
       ctx.fillStyle = css.getPropertyValue('--ink');
       ctx.fillRect(sx(s.stage.finish) - 1.5, 4, 3, H - 8);
-      // Viewport.
-      ctx.strokeStyle = css.getPropertyValue('--accent');
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(sx(this.camX), 2, (this.visibleSquares() / span) * W, H - 4);
       for (const r of s.riders) {
-        const p = this.pos[r.id];
-        const hx = Math.max(0, Math.min(n, Math.round(p.x)));
+        const x = sx(Math.min(this.pos[r.id].x, s.stage.finish + 2));
+        const y = H / 2 + (r.lane - 1.5) * 5;
         ctx.fillStyle = this.teamColor(r);
-        ctx.beginPath();
-        ctx.arc(sx(p.x + 0.5), sy(heights[hx]) - 4, r.team === this.human ? 4.5 : 3, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, r.team === this.human ? 5 : 3.5, 0, Math.PI * 2); ctx.fill();
         if (r.team === this.human) { ctx.strokeStyle = '#ffd84d'; ctx.lineWidth = 1.5; ctx.stroke(); }
       }
     }

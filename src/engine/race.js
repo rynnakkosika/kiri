@@ -1,4 +1,4 @@
-// Race lifecycle (spec rules 7–9): create, preview, resolve, standings.
+// Race lifecycle (spec 003 rules 6–9): create, preview, resolve, standings.
 (function (Kiri) {
   'use strict';
   const C = Kiri.C;
@@ -22,29 +22,30 @@
         });
       });
     });
-    // Start grid: three abreast behind the line, in seeded random order.
+    // Autostart: rows of four behind the start line, post positions drawn by seed.
     rand.shuffle(riders.map((r) => r.id)).forEach((id, i) => {
-      riders[id].square = -1 - Math.floor(i / 3);
-      riders[id].lane = i % 3;
+      riders[id].square = -1 - Math.floor(i / C.LANES);
+      riders[id].lane = i % C.LANES;
     });
-    return {
-      stage, wind: setup.wind || stage.wind, teams, riders,
-      turn: 1, sprintDone: [], finishOrder: [], log: [], over: false,
-    };
+    return { stage, teams, riders, turn: 1, finishOrder: [], log: [], over: false };
   }
 
   function previewOrder(state, riderId, order) {
     const r = state.riders[riderId];
-    const sheltered = Kiri.isSheltered(state, r);
-    const cost = Kiri.energyCost(order.effort, sheltered, state.wind);
-    const st = Kiri.strainAfter(r, order.effort, sheltered);
-    const recovery = Kiri.squareAt(state.stage, r.square).terrain === 'descent' && order.effort <= C.DESCENT_RECOVERY_MAX_EFFORT
-      ? C.DESCENT_RECOVERY : 0;
+    const pos = Kiri.position(state, r);
+    const cost = Kiri.energyCost(order.effort, pos);
+    const st = Kiri.strainAfter(r, order.effort, pos);
+    const requested = Kiri.requestedLane(r, order.lane);
+    const spots = state.riders.filter((x) => !x.finished && x.id !== r.id);
+    // A lane blocked by a horse alongside can't be taken this turn: the horse stays in its lane.
+    const lane = Kiri.allowedLanes(r, spots).includes(requested) ? requested : r.lane;
     return {
-      cost, recovery, sheltered, strain: st.strain, cracked: st.cracked,
-      reach: Kiri.pathReach(state.stage, r, order.effort),
+      pos, cost, strain: st.strain, cracked: st.cracked, requested,
+      reach: Kiri.pathReach(state.stage, r, order.effort, lane - r.lane, state.turn),
+      lane, laneBlocked: lane !== requested,
       legal: Kiri.legalEfforts(state, r).includes(order.effort),
-      kick: Kiri.budget(r, order.effort, state.stage) > 2 * order.effort,
+      kick: r.archetype === 'closer' && Kiri.budget(r, order.effort, state.stage, state.turn) > 2 * order.effort,
+      gate: r.archetype === 'gate' && Kiri.budget(r, order.effort, state.stage, state.turn) > 2 * order.effort,
     };
   }
 
@@ -60,75 +61,69 @@
     const pre = {};
     for (const r of active) {
       const o = orders[r.id];
-      if (!o) throw new Error('Missing order for rider ' + r.id);
+      if (!o) throw new Error('Missing order for horse ' + r.id);
       const p = previewOrder(state, r.id, o);
-      if (!p.legal) throw new Error('Illegal effort ' + o.effort + ' for rider ' + r.id);
-      pre[r.id] = Object.assign(p, { from: r.square, fromLane: r.lane, lanePref: o.lane || 0, effort: o.effort });
+      if (!p.legal) throw new Error('Illegal speed ' + o.effort + ' for horse ' + r.id);
+      pre[r.id] = Object.assign(p, { from: r.square, fromLane: r.lane, effort: o.effort });
     }
 
     const taken = new Map(); // square -> Set(lanes)
     const occupy = (sq, l) => { if (!taken.has(sq)) taken.set(sq, new Set()); taken.get(sq).add(l); };
     active.forEach((r) => occupy(r.square, r.lane));
+    const startSpots = active.map((r) => ({ id: r.id, square: r.square, lane: r.lane }));
 
-    const order = resolutionOrder(active);
     const moves = [];
-    order.forEach((r, idx) => {
+    resolutionOrder(active).forEach((r, idx) => {
       const p = pre[r.id];
       taken.get(r.square).delete(r.lane);
+      const allowed = Kiri.allowedLanes(r, startSpots.filter((x) => x.id !== r.id));
       let sq = p.reach;
       let lane = -1;
       for (; sq >= r.square; sq--) {
-        const w = Kiri.squareAt(s.stage, sq).width;
-        lane = Kiri.pickLane(w, r.lane + p.lanePref, taken.get(sq) || new Set());
+        lane = Kiri.pickLane(allowed, p.lane, taken.get(sq) || new Set());
         if (lane >= 0) break;
       }
       if (lane < 0) { sq = r.square; lane = r.lane; }
       const blocked = sq < p.reach;
+      const boxed = p.requested !== r.lane && lane === r.lane;
       r.square = sq;
       r.lane = lane;
       occupy(sq, lane);
 
-      r.energy = Math.max(0, Math.min(r.maxEnergy, r.energy - p.cost + p.recovery));
+      r.energy = Math.max(0, Math.min(r.maxEnergy, r.energy - p.cost));
       if (r.crack > 0) r.crack--;
       r.strain = p.strain;
       if (p.cracked) r.crack = C.CRACK_TURNS;
-      moves.push({ r, p, idx, blocked });
+      moves.push({ r, p, idx, blocked, boxed });
     });
-
-    // Line crossings, furthest first, then resolution order.
-    const byLine = (line) => moves
-      .filter((m) => m.p.from < line && m.r.square >= line)
-      .sort((a, b) => b.r.square - a.r.square || a.idx - b.idx);
 
     const notes = {};
     const note = (id, t) => { (notes[id] = notes[id] || []).push(t); };
-    for (const m of byLine(s.stage.sprint)) {
-      const slot = s.sprintDone.length;
-      s.sprintDone.push(m.r.id);
-      if (slot < C.SPRINT_POINTS.length) {
-        m.r.points += C.SPRINT_POINTS[slot];
-        note(m.r.id, 'sprint +' + C.SPRINT_POINTS[slot]);
-      }
-    }
-    for (const m of byLine(s.stage.finish)) {
+    const finishers = moves
+      .filter((m) => m.p.from < s.stage.finish && m.r.square >= s.stage.finish)
+      .sort((a, b) => b.r.square - a.r.square || a.idx - b.idx);
+    for (const m of finishers) {
       s.finishOrder.push(m.r.id);
       m.r.finished = true;
       m.r.finishTurn = s.turn;
       m.r.finishPlace = s.finishOrder.length;
-      const pts = C.FINISH_POINTS[m.r.finishPlace - 1] || 0;
-      m.r.points += pts;
-      note(m.r.id, 'finishes #' + m.r.finishPlace + (pts ? ' +' + pts : ''));
+      const prize = C.PURSE[m.r.finishPlace - 1] || 0;
+      m.r.points += prize;
+      note(m.r.id, 'finishes #' + m.r.finishPlace + (prize ? ' +' + prize + ' €' : ''));
     }
 
     for (const m of moves) {
-      if (m.blocked) note(m.r.id, 'blocked');
+      if (m.p.pos.deathSeat) note(m.r.id, 'death seat');
+      else if (m.p.pos.covered) note(m.r.id, 'in cover');
+      if (m.p.pos.wide) note(m.r.id, 'wide in the curve');
+      if (m.boxed) note(m.r.id, 'boxed in');
+      else if (m.blocked) note(m.r.id, 'blocked');
       if (m.p.kick) note(m.r.id, 'kick');
-      if (m.p.recovery) note(m.r.id, 'recovers ' + m.p.recovery);
-      if (m.p.cracked) note(m.r.id, 'CRACKS');
+      if (m.p.cracked) note(m.r.id, 'GALLOPS');
       s.log.push({
         turn: s.turn, rider: m.r.id, effort: m.p.effort, from: m.p.from, fromLane: m.p.fromLane, to: m.r.square,
-        lane: m.r.lane, sheltered: m.p.sheltered, cost: m.p.cost, strain: m.r.strain, cracked: m.p.cracked,
-        notes: notes[m.r.id] || [],
+        lane: m.r.lane, position: m.p.pos.kind, sheltered: m.p.pos.covered, cost: m.p.cost, strain: m.r.strain,
+        cracked: m.p.cracked, notes: notes[m.r.id] || [],
       });
     }
 

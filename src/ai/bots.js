@@ -1,23 +1,24 @@
-// AI personalities. Each scores every (effort, lane) option for each rider and picks the best.
+// AI personalities. Each scores every (speed, lane) option for each horse and picks the best.
+// Keys stay as in 001 (diesel, wheelsucker, attacker, planner) so saves and tests stay stable.
 (function (Kiri) {
   'use strict';
   const C = Kiri.C;
 
   const PERSONALITIES = {
-    diesel: { name: 'Diesel', blurb: 'Rides a steady, sustainable tempo.' },
-    wheelsucker: { name: 'Wheelsucker', blurb: 'Hides in shelter, then launches late.' },
-    attacker: { name: 'Attacker', blurb: 'Attacks early and hunts the sprint line.' },
-    planner: { name: 'Planner', blurb: 'Weighs every square against the energy left.' },
+    diesel: { name: 'Steady', blurb: 'Trots an even, sustainable tempo.' },
+    wheelsucker: { name: 'Pocket sitter', blurb: 'Hides in cover on the rail, pulls out late.' },
+    attacker: { name: 'Front runner', blurb: 'Goes for the lead early and dares you to come round.' },
+    planner: { name: 'Tactician', blurb: 'Weighs every metre against the energy left.' },
   };
 
-  // Difficulty changes only how bots decide (score noise, personality mix), never the rules.
+  // Difficulty changes only how bots decide (score noise, lapses, sprint timing, personality mix).
   const DIFFICULTY = {
     easy: { name: 'Easy', noise: 3, lapse: 0.35, allInRange: 10, pool: ['diesel', 'wheelsucker', 'attacker'] },
     normal: { name: 'Normal', noise: 0.6, lapse: 0, allInRange: 30, pool: ['diesel', 'wheelsucker', 'attacker', 'planner'] },
     hard: { name: 'Hard', noise: 0, lapse: 0, allInRange: 40, pool: ['planner', 'planner', 'attacker', 'wheelsucker', 'planner'] },
   };
 
-  // Guess where every other rider ends up: same distance as their last move.
+  // Guess where every other horse ends up: same distance as their last move.
   function predictOthers(state, me) {
     const last = {};
     for (const e of state.log) last[e.rider] = e.to - e.from;
@@ -26,7 +27,7 @@
       .map((r) => ({ square: r.square + (last[r.id] !== undefined ? last[r.id] : 4), lane: r.lane }));
   }
 
-  // Highest effort whose cost, paid every turn to the line, fits the energy left.
+  // Highest speed whose cost, paid every turn to the line, fits the energy left.
   function sustainAt(h, energy) {
     let best = 1;
     for (let e = 1; e <= C.MAX_EFFORT; e++) {
@@ -35,23 +36,10 @@
     return best;
   }
 
+  // Pace for the rest of the race, assuming the current position's cost multiplier persists.
   function sustainableEffort(state, r) {
-    return sustainAt(Kiri.halfStepsToFinish(state.stage, r.archetype, r.square), r.energy);
-  }
-
-  // Planner's estimate of turns to the line if it takes this option, then rides at a sustainable tempo.
-  function turnsToFinish(state, r, o) {
-    const h = Kiri.halfStepsToFinish(state.stage, r.archetype, o.p.reach);
-    if (h <= 0) return 0;
-    const energy = Math.max(0, r.energy - o.p.cost + o.p.recovery);
-    return 1 + h / (2 * sustainAt(h, energy));
-  }
-
-  // Where the bulk of the field will be: the median predicted square of riders still racing.
-  function fieldMedian(others) {
-    if (!others.length) return 0;
-    const sq = others.map((o) => o.square).sort((a, b) => a - b);
-    return sq[Math.floor(sq.length / 2)];
+    const mult = Math.max(0.6, Kiri.position(state, r).mult);
+    return sustainAt(Kiri.halfStepsToFinish(state.stage, r.archetype, r.square), r.energy / mult);
   }
 
   function canGoAllIn(state, r, e) {
@@ -59,34 +47,55 @@
     return C.EFFORT_COST[e] * Math.ceil(h / (2 * e)) <= r.energy;
   }
 
+  // Tactician's estimate of turns to the line if it takes this option and then holds a
+  // sustainable tempo from the position it lands in.
+  function turnsToFinish(state, r, o) {
+    const h = Kiri.halfStepsToFinish(state.stage, r.archetype, o.land);
+    if (h <= 0) return 0;
+    const energy = Math.max(0, r.energy - o.p.cost) / Math.max(0.6, o.next.mult);
+    return 1 + h / (2 * sustainAt(h, energy));
+  }
+
+  function fieldMedian(others) {
+    if (!others.length) return 0;
+    const sq = others.map((o) => o.square).sort((a, b) => a - b);
+    return sq[Math.floor(sq.length / 2)];
+  }
+
+  // Simulate own landing against the predicted field: lane limits, then drop back while full.
   function options(state, r, others) {
+    const now = state.riders.filter((x) => !x.finished && x.id !== r.id);
     const out = [];
     for (const effort of Kiri.legalEfforts(state, r)) {
-      const p = Kiri.previewOrder(state, r.id, { effort });
       for (const lane of [-1, 0, 1]) {
-        const w = Kiri.squareAt(state.stage, p.reach).width;
-        const taken = new Set(others.filter((o) => o.square === p.reach).map((o) => o.lane));
-        let landLane = Kiri.pickLane(w, r.lane + lane, taken);
-        if (landLane < 0) landLane = Math.min(w - 1, Math.max(0, r.lane + lane));
-        const shelterNext = Kiri.shelteredAt(state.stage, state.wind, p.reach, landLane, others);
-        out.push({ effort, lane, p, shelterNext, landLane });
+        const p = Kiri.previewOrder(state, r.id, { effort, lane });
+        const allowed = Kiri.allowedLanes(r, now);
+        let land = p.reach;
+        let landLane = -1;
+        for (; land > r.square; land--) {
+          const taken = new Set(others.filter((o) => o.square === land).map((o) => o.lane));
+          landLane = Kiri.pickLane(allowed, p.lane, taken);
+          if (landLane >= 0) break;
+        }
+        if (landLane < 0) { land = r.square; landLane = r.lane; }
+        const next = Kiri.positionAt(state.stage, land, landLane, others);
+        out.push({ effort, lane, p, land, landLane, next });
       }
     }
     return out;
   }
 
   function score(kind, state, r, o, ctx) {
-    const progress = o.p.reach - r.square;
+    const progress = o.land - r.square;
     const toFinish = state.stage.finish - r.square;
-    const finishes = o.p.reach >= state.stage.finish;
-    const sprintOpen = state.sprintDone.length < C.SPRINT_POINTS.length && r.square < state.stage.sprint && o.p.reach >= state.stage.sprint;
-    let s = 0;
+    const finishes = o.land >= state.stage.finish;
+    const posValue = (1 - o.next.mult) * 3; // cover +1.2, death seat −1.8, lane 4 −2.1
+    let s = posValue;
     if (o.p.cracked && !finishes) s -= 20;
     if (o.p.strain >= 8 && !finishes) s -= 2;
-    if (o.shelterNext) s += 1.5;
     if (finishes) s += 30 + o.effort;
 
-    if (ctx.allIn) return s + progress * 3 - o.p.cost * 0.1;
+    if (ctx.allIn) return s * 0.3 + progress * 3 - o.p.cost * 0.1;
 
     switch (kind) {
       case 'diesel':
@@ -94,19 +103,23 @@
         break;
       case 'wheelsucker': {
         if (toFinish <= 15) { s += progress * 3 - o.p.cost * 0.1; break; }
-        const gap = Math.max(0, ctx.median - o.p.reach);
-        s += (o.shelterNext ? 5 : 0) + progress * 0.9 - o.p.cost * 0.45 - gap * 0.9 - (o.effort > ctx.sustain + 1 ? 4 : 0);
+        // Leave the pocket in time: on the rail with ~600 m to go, start looking for a way out.
+        if (toFinish <= 26 && r.lane === 0 && o.landLane >= 1) s += 3;
+        const gap = Math.max(0, ctx.median - o.land);
+        s += posValue * 2 + progress * 0.9 - o.p.cost * 0.45 - gap * 0.9 - (o.effort > ctx.sustain + 1 ? 4 : 0);
         break;
       }
       case 'attacker': {
         const early = r.square < state.stage.finish * 0.6;
-        if (early && r.strain <= 5) s += progress * 1.2 - o.p.cost * 0.25;
-        else s += -Math.abs(o.effort - Math.min(ctx.sustain, 4)) * 2;
-        if (sprintOpen) s += 6;
+        const leads = o.land > ctx.front;
+        // Aggressive early, but never so hard that the horse can't trot home.
+        const overpace = Math.max(0, o.effort - ctx.sustain - 1) * 3;
+        if (early && r.strain <= 5) s += progress * 1.2 - o.p.cost * 0.25 + (leads && o.landLane === 0 ? 4 : 0) - overpace;
+        else s += -Math.abs(o.effort - Math.min(ctx.sustain, 5)) * 2 + (leads ? 1.5 : 0);
         break;
       }
       case 'planner':
-        s += -turnsToFinish(state, r, o) * 4 + (sprintOpen ? 3 : 0) - Math.max(0, o.p.strain - 6);
+        s += -turnsToFinish(state, r, o) * 4 + posValue - Math.abs(o.effort - ctx.sustain) * 1.5 - Math.max(0, o.p.strain - 6);
         break;
     }
     return s;
@@ -125,6 +138,7 @@
       const ctx = {
         sustain: sustainableEffort(state, r),
         median: fieldMedian(others),
+        front: others.reduce((m, o) => Math.max(m, o.square), -Infinity),
         allIn: canGoAllIn(state, r, top) && state.stage.finish - r.square <= d.allInRange,
       };
       // A lapse: misjudge the tempo, either overcooking it or dawdling.

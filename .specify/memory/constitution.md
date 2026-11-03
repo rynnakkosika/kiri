@@ -4,13 +4,14 @@
 
 ### I. Original Design
 
-Kiri is an original tactical cycling game. It MAY borrow genre ideas (turn-based racing,
-drafting, fatigue, AI opponents) from the flAImme project that inspired it, but it MUST NOT
-reproduce the rules, components, card lists or names of any existing commercial board game.
-Every core mechanic MUST be described in the project's own rules text.
+Kiri is an original tactical racing game, currently themed as harness racing (trotting). It MAY
+borrow genre ideas (turn-based racing, drafting or cover, fatigue, AI opponents) from the flAImme
+project that inspired it and from real-world sport, but it MUST NOT reproduce the rules,
+components, card lists or names of any existing commercial board game. Every core mechanic MUST be
+described in the project's own rules text.
 
-Rationale: the source repository was an AI for an existing game; this project keeps the idea
-of a thinking cycling race and builds its own rules.
+Rationale: the source repository was an AI for an existing game. This project keeps the idea of a
+thinking race against AI rivals and builds its own rules.
 
 ### II. Pure Deterministic Engine
 
@@ -66,4 +67,4 @@ sections, PATCH for wording) and updating the Last Amended date. Every plan MUST
 Constitution Check against these principles, and any violation MUST be justified in that plan's
 Complexity Tracking table.
 
-**Version**: 1.0.1 | **Ratified**: 2026-11-02 | **Last Amended**: 2026-11-02
+**Version**: 1.1.0 | **Ratified**: 2026-11-02 | **Last Amended**: 2026-11-03

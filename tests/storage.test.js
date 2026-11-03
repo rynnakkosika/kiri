@@ -8,7 +8,7 @@ describe('Storage (002 US2)', () => {
 
   it('save round trip keeps the race state intact', () => {
     backup();
-    const race = Kiri.createRace({ stage: Kiri.PRESET_STAGES[0], seed: 3, teams: [{ name: 'A', color: '#000', controller: 'human', archetypes: ['rouleur', 'sprinter'] }] });
+    const race = Kiri.createRace({ stage: Kiri.PRESET_STAGES[0], seed: 3, teams: [{ name: 'A', color: '#000', controller: 'human', archetypes: ['stayer', 'closer'] }] });
     S.writeSave({ race, raceSetup: { seed: 3 }, difficulty: 'hard' });
     const back = S.loadSave();
     restore();

@@ -6,22 +6,23 @@
   const esc = UI.esc;
   const root = document.getElementById('app');
 
-  const TEAM_NAMES = ['Pohjola Pro', 'Revontuli RT', 'Kalevala Velo', 'Saimaa Speed', 'Lappi Racing'];
+  const TEAM_NAMES = ['Talli Pohjola', 'Revontulen Talli', 'Kalevan Kavio', 'Saimaan Ravi', 'Lapin Ravitalli'];
   const TEAM_COLORS = ['#2f6fdf', '#1f9d57', '#8e44ad', '#d4a106', '#0f8f8f'];
   const HUMAN_COLOR = '#e4572e';
-  const SURNAMES = ['Virtanen', 'Korhonen', 'Nieminen', 'Mäkinen', 'Hämäläinen', 'Laine', 'Heikkinen', 'Koskinen', 'Järvinen', 'Lehtonen',
-    'Saarinen', 'Salminen', 'Kinnunen', 'Turunen', 'Salo', 'Lindqvist', 'Rantanen', 'Karjalainen', 'Lahtinen', 'Peltonen'];
+  const HORSE_NAMES = ['Tähtisade', 'Myrskyn Poika', 'Salamaveikko', 'Tuulen Tytär', 'Kultakavio', 'Revontuli', 'Pikku Ukkonen', 'Hopeasiipi',
+    'Routaprinssi', 'Sisun Liekki', 'Kesäheila', 'Pohjantähti', 'Usvan Neito', 'Rautatamma', 'Hallan Valo', 'Kaamosveli',
+    'Aallon Ruhtinas', 'Leimuava', 'Kipinätär', 'Jäähile'];
   const DIFFICULTY_BLURB = {
-    easy: 'Rivals misjudge their pace and sprint late. Good for learning.',
-    normal: 'A mixed field of all four personalities.',
-    hard: 'Mostly Planners, no mistakes, early sprints. Same rules for everyone.',
+    easy: 'Rivals misjudge their pace and make their run late. Good for learning.',
+    normal: 'A mixed field of all four driving styles.',
+    hard: 'Mostly Tacticians, no mistakes, early drives for home. Same rules for everyone.',
   };
-  const AI_ARCHES = [['rouleur', 'sprinter'], ['climber', 'rouleur'], ['sprinter', 'climber'], ['rouleur', 'climber'], ['climber', 'sprinter']];
+  const AI_ARCHES = [['stayer', 'closer'], ['gate', 'stayer'], ['closer', 'gate'], ['stayer', 'gate'], ['gate', 'closer']];
 
   const app = {
     screen: 'title',
     setup: {
-      stage: 0, seed: 42, wind: 'default', aiTeams: 3, archetypes: ['rouleur', 'sprinter'], teamName: 'Sisu Cycling',
+      stage: 1, seed: 42, aiTeams: 3, archetypes: ['stayer', 'closer'], teamName: 'Talli Sisu',
       difficulty: Kiri.Store.prefs().difficulty,
     },
     difficulty: 'normal',
@@ -47,17 +48,17 @@
     const save = Kiri.Store.loadSave();
     const cont = save
       ? '<button class="btn primary" data-go="continue">Continue: ' + esc(save.race.stage.name) +
-        (save.tour ? ' (tour stage ' + (save.tour.index + 1) + '/3)' : '') + (save.race.over ? ', results' : ', turn ' + save.race.turn) + '</button>'
+        (save.tour ? ' (series race ' + (save.tour.index + 1) + '/3)' : '') + (save.race.over ? ', results' : ', turn ' + save.race.turn) + '</button>'
       : '';
     show('<div class="title-screen"><div class="title-card">' +
       '<div class="logo">KIR<span>I</span></div>' +
-      '<div class="tagline">A tactical cycling race. Spend your energy wisely, ride in the wind shadow, and time your final push.</div>' +
+      '<div class="tagline">Harness racing on the oval. Sit in cover, stay out of the death seat, and time your drive for home.</div>' +
       '<div class="menu">' + cont +
       '<button class="btn' + (save ? '' : ' primary') + '" data-go="quick">Quick race</button>' +
       '<button class="btn" data-go="custom">Custom race</button>' +
-      '<button class="btn" data-go="tour">Tour: 3 stages</button>' +
+      '<button class="btn" data-go="tour">Series: 3 races</button>' +
       '<button class="btn" data-go="rules">How to play</button>' +
-      '</div><p class="muted small" style="margin-top:28px">Two riders. Nine effort levels. One finish line.</p></div></div>');
+      '</div><p class="muted small" style="margin-top:28px">Two trotters. Nine speeds. One finish post.</p></div></div>');
     root.querySelector('.menu').addEventListener('click', (e) => {
       const go = e.target.dataset.go;
       if (go === 'continue') continueSaved(save);
@@ -84,21 +85,20 @@
     const s = app.setup;
     const tour = mode === 'tour';
     const stageField = tour
-      ? '<div class="field"><label>Stages</label><div>1. Rannikko · 2. Harju · 3. Kivitie</div><div class="muted small">Points add up over all three stages. Energy and strain reset between stages.</div></div>'
-      : '<div class="field"><label>Stage</label>' + seg('stage', [[0, 'Rannikko'], [1, 'Harju'], [2, 'Kivitie'], ['random', 'Random']], s.stage) +
+      ? '<div class="field"><label>Races</label><div>1. Mile 1609 m · 2. Classic 2100 m · 3. Long 2600 m</div><div class="muted small">Prize money adds up over all three races. Energy and strain reset between races.</div></div>'
+      : '<div class="field"><label>Distance</label>' + seg('stage', [[0, 'Mile 1609 m'], [1, 'Classic 2100 m'], [2, 'Long 2600 m'], ['random', 'Random']], s.stage) +
         (s.stage === 'random' ? '<div style="margin-top:6px">Seed <input type="number" id="seed" value="' + esc(s.seed) + '"></div>' : '') +
-        '<canvas class="stage-preview" id="stagePreview"></canvas><div class="muted small" id="stageBlurb"></div></div>' +
-        '<div class="field"><label>Wind</label>' + seg('wind', [['default', 'Stage default'], ['calm', 'Calm'], ['head', 'Headwind'], ['crossLeft', 'Cross ↓'], ['crossRight', 'Cross ↑']], s.wind) + '</div>';
+        '<canvas class="stage-preview" id="stagePreview"></canvas><div class="muted small" id="stageBlurb"></div></div>';
     const archOpts = Object.keys(C.ARCHETYPES).map((k) => [k, C.ARCHETYPES[k].name]);
-    show('<div class="page"><div class="page-head"><div><h1>' + (tour ? 'Tour setup' : 'Custom race') + '</h1><div class="muted">Set up the race, then ride.</div></div>' +
+    show('<div class="page"><div class="page-head"><div><h1>' + (tour ? 'Series setup' : 'Custom race') + '</h1><div class="muted">Set up the race, then drive.</div></div>' +
       '<button class="btn" id="back">← Back</button></div>' +
       '<div class="setup-grid"><div class="card">' + stageField +
-      '<div class="field"><label>AI teams</label>' + seg('aiTeams', [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5']], s.aiTeams) + '<div class="muted small">Each AI team has a personality: Diesel, Wheelsucker, Attacker or Planner.</div></div>' +
+      '<div class="field"><label>AI stables</label>' + seg('aiTeams', [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5']], s.aiTeams) + '<div class="muted small">Each AI stable has a driving style: ' + Object.keys(Kiri.PERSONALITIES).map((k) => Kiri.PERSONALITIES[k].name).join(', ') + '.</div></div>' +
       '<div class="field"><label>Difficulty</label>' + seg('difficulty', Object.keys(Kiri.DIFFICULTY).map((k) => [k, Kiri.DIFFICULTY[k].name]), s.difficulty) +
       '<div class="muted small">' + DIFFICULTY_BLURB[s.difficulty] + '</div></div>' +
       '</div><div class="card">' +
-      '<div class="field"><label>Team name</label><input type="text" id="teamName" maxlength="24" value="' + esc(s.teamName) + '" style="width:100%"></div>' +
-      [0, 1].map((i) => '<div class="field"><label>Rider ' + (i + 1) + '</label>' + seg('arch' + i, archOpts, s.archetypes[i]) +
+      '<div class="field"><label>Stable name</label><input type="text" id="teamName" maxlength="24" value="' + esc(s.teamName) + '" style="width:100%"></div>' +
+      [0, 1].map((i) => '<div class="field"><label>Horse ' + (i + 1) + '</label>' + seg('arch' + i, archOpts, s.archetypes[i]) +
         '<div class="muted small">' + esc(C.ARCHETYPES[s.archetypes[i]].blurb) + ' Energy ' + C.ARCHETYPES[s.archetypes[i]].energy + '.</div></div>').join('') +
       '</div></div><div style="margin-top:18px;text-align:right"><button class="btn primary big" id="start">' + (tour ? 'Start the tour ▶' : 'Start race ▶') + '</button></div></div>');
 
@@ -108,7 +108,6 @@
       if (v === undefined) return;
       const k = el.dataset.seg;
       if (k === 'stage') s.stage = v === 'random' ? 'random' : Number(v);
-      else if (k === 'wind') s.wind = v;
       else if (k === 'aiTeams') s.aiTeams = Number(v);
       else if (k === 'difficulty') { s.difficulty = v; Kiri.Store.setPref('difficulty', v); }
       else if (k === 'arch0') s.archetypes[0] = v;
@@ -121,54 +120,55 @@
     root.querySelector('#teamName').addEventListener('input', (e) => { s.teamName = e.target.value; });
     drawStagePreview();
     root.querySelector('#start').onclick = () => {
-      s.teamName = root.querySelector('#teamName').value.trim() || 'Sisu Cycling';
+      s.teamName = root.querySelector('#teamName').value.trim() || 'Talli Sisu';
       if (tour) { startTour(); return; }
       app.tour = null;
       const seed = s.stage === 'random' ? Number(s.seed) * 13 + 5 : Math.floor(Math.random() * 100000);
-      startRace(buildSetup(setupStage(), s.wind === 'default' ? null : s.wind, seed));
+      startRace(buildSetup(setupStage(), seed));
     };
   }
 
+  // Small oval with the start point and the distance covered drawn along it.
   function drawStagePreview() {
     const cv = root.querySelector('#stagePreview');
     if (!cv) return;
-    const stage = setupStage();
-    const blurb = root.querySelector('#stageBlurb');
-    blurb.textContent = stage.name + ' · ' + stage.finish + ' squares · ' + C.WIND_NAMES[stage.wind] + '. ' + stage.blurb;
+    const race = setupStage();
+    const laps = (race.meters / 1000).toFixed(2).replace(/\.?0+$/, '');
+    root.querySelector('#stageBlurb').textContent = race.name + ' · ' + race.meters + ' m (' + laps + ' laps) · ' + race.blurb;
     const dpr = window.devicePixelRatio || 1;
     cv.width = cv.clientWidth * dpr;
     cv.height = cv.clientHeight * dpr;
     const ctx = cv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const W = cv.clientWidth;
     const H = cv.clientHeight;
-    let h = 0;
-    const pts = [0];
-    for (let i = 0; i < stage.finish; i++) {
-      const t = stage.squares[i].terrain;
-      h += t === 'climb' ? 1 : t === 'descent' ? -1 : 0;
-      pts.push(h);
-    }
-    const lo = Math.min.apply(null, pts);
-    const hi = Math.max.apply(null, pts);
-    const sx = (i) => (i / stage.finish) * W;
-    const sy = (v) => H - 8 - ((v - lo) / Math.max(1, hi - lo)) * (H - 20);
-    for (let i = 0; i < stage.finish; i++) {
-      const t = stage.squares[i].terrain;
-      ctx.strokeStyle = { flat: '#9aa0a8', climb: '#c26a2b', descent: '#3f7fbf', cobbles: '#7b6f5a' }[t];
-      ctx.lineWidth = t === 'cobbles' ? 5 : 3;
-      ctx.beginPath(); ctx.moveTo(sx(i), sy(pts[i])); ctx.lineTo(sx(i + 1), sy(pts[i + 1])); ctx.stroke();
-    }
-    ctx.fillStyle = '#1f9d57';
-    ctx.fillRect(sx(stage.sprint) - 1, 0, 2, H);
+    const r = H * 0.36;
+    const hl = r * 1.57;
+    const cx = cv.clientWidth / 2;
+    const cy = H / 2;
+    const pt = (p) => {
+      p = ((p % C.LAP) + C.LAP) % C.LAP;
+      if (p < 10) return [cx - hl + (p / 10) * 2 * hl, cy + r];
+      if (p < 20) { const t = Math.PI / 2 - ((p - 10) / 10) * Math.PI; return [cx + hl + r * Math.cos(t), cy + r * Math.sin(t)]; }
+      if (p < 30) return [cx + hl - ((p - 20) / 10) * 2 * hl, cy - r];
+      const t = -Math.PI / 2 - ((p - 30) / 10) * Math.PI;
+      return [cx - hl + r * Math.cos(t), cy + r * Math.sin(t)];
+    };
+    ctx.strokeStyle = '#c89a6a';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    for (let p = 0; p <= C.LAP; p += 0.25) { const [x, y] = pt(p); if (p === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+    ctx.stroke();
+    const mark = (p, color) => { const [x, y] = pt(p); ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); };
+    mark(race.startOffset, '#1f6fd0');
+    mark(C.FINISH_LAP_POS, '#111');
   }
 
-  function buildSetup(stage, wind, seed, aiCount, archetypes, teamName) {
+  function buildSetup(stage, seed, aiCount, archetypes, teamName) {
     const s = app.setup;
     const rand = Kiri.rng(seed);
     const difficulty = s.difficulty;
     const personalities = rand.shuffle(Kiri.DIFFICULTY[difficulty].pool);
-    const names = rand.shuffle(SURNAMES);
+    const names = rand.shuffle(HORSE_NAMES);
     const n = aiCount || s.aiTeams;
     const teams = [{ name: teamName || s.teamName, color: HUMAN_COLOR, controller: 'human', archetypes: (archetypes || s.archetypes).slice(), riderNames: [names[0], names[1]] }];
     for (let i = 0; i < n; i++) {
@@ -177,19 +177,19 @@
         archetypes: AI_ARCHES[(i + seed) % AI_ARCHES.length], riderNames: [names[2 + i * 2], names[3 + i * 2]],
       });
     }
-    return { stage, wind, teams, seed, difficulty };
+    return { stage, teams, seed, difficulty };
   }
 
   function startQuick() {
     const seed = Math.floor(Math.random() * 100000);
     app.tour = null;
-    startRace(buildSetup(Kiri.PRESET_STAGES[seed % 3], null, seed, 3, ['rouleur', 'sprinter'], 'Sisu Cycling'));
+    startRace(buildSetup(Kiri.PRESET_STAGES[1], seed, 3, ['stayer', 'closer'], 'Talli Sisu'));
   }
 
   function startTour() {
     const seed = Math.floor(Math.random() * 100000);
     app.tour = Kiri.createTour(seed);
-    app.tourSetup = buildSetup(app.tour.stages[0], null, seed);
+    app.tourSetup = buildSetup(app.tour.stages[0], seed);
     startRace(Object.assign({}, app.tourSetup, { stage: app.tour.stages[0], seed: seed }));
   }
 
@@ -244,16 +244,16 @@
   function raceScreen() {
     app.screen = 'race';
     const race = app.race;
-    const tourLabel = app.tour ? '<span class="chip">Tour stage ' + (app.tour.index + 1) + '/3</span>' : '';
+    const tourLabel = app.tour ? '<span class="chip">Series race ' + (app.tour.index + 1) + '/3</span>' : '';
     show('<div class="race">' +
-      '<div class="topbar"><span class="logo-sm">KIR<span>I</span></span><span class="stage-name">' + esc(race.stage.name) + '</span>' + tourLabel +
-      UI.windChip(race.wind) + '<span class="chip">' + Kiri.DIFFICULTY[app.difficulty].name + '</span><span class="chip" id="turnChip"></span><span class="chip" id="toGo"></span><span class="spacer"></span>' +
+      '<div class="topbar"><span class="logo-sm">KIR<span>I</span></span><span class="stage-name">' + esc(race.stage.name) + ' ' + race.stage.meters + ' m</span>' + tourLabel +
+      '<span class="chip">' + Kiri.DIFFICULTY[app.difficulty].name + '</span><span class="chip" id="turnChip"></span><span class="chip" id="toGo"></span><span class="spacer"></span>' +
       '<button class="btn" id="muteBtn" title="Sound on/off"></button><button class="btn" id="rulesBtn">Rules</button><button class="btn" id="quitBtn">Quit</button></div>' +
-      '<div class="track-wrap"><canvas id="track"></canvas><div class="track-tools"><button class="btn" id="followBtn">Follow my riders</button></div><div class="tooltip" id="tip" hidden></div></div>' +
-      '<canvas id="profile" title="Stage profile: click to look there"></canvas>' +
+      '<div class="track-wrap"><canvas id="track"></canvas><div class="tooltip" id="tip" hidden></div></div>' +
+      '<canvas id="profile" title="Distance covered by every horse"></canvas>' +
       '<div class="race-main"><div class="controls"><div class="rider-cards" id="cards"></div>' +
-      '<div class="ride-row"><button class="btn primary big" id="rideBtn">Ride ▶</button>' +
-      '<span class="muted small kbd-hint"><kbd>1</kbd>–<kbd>9</kbd> effort · <kbd>←</kbd>/<kbd>→</kbd> lane · <kbd>Tab</kbd> switch rider · <kbd>Enter</kbd> ride</span>' +
+      '<div class="ride-row"><button class="btn primary big" id="rideBtn">Drive ▶</button>' +
+      '<span class="muted small kbd-hint"><kbd>1</kbd>–<kbd>9</kbd> speed · <kbd>←</kbd>/<kbd>→</kbd> inside/outside · <kbd>Tab</kbd> switch horse · <kbd>Enter</kbd> drive</span>' +
       '<span class="muted small" id="hint"></span></div></div>' +
       '<div class="side"><div class="card"><h3>Race</h3><div id="standings"></div></div><div class="card"><h3>Race log</h3><div class="log" id="log"></div></div></div></div></div>');
 
@@ -268,10 +268,9 @@
       tip.style.top = y + 'px';
       tip.innerHTML = '<b>' + (st.id + 1) + ' ' + esc(UI.riderName(st)) + '</b> · ' + esc(app.race.teams[st.team].name) +
         (app.race.teams[st.team].controller !== 'human' ? ' (' + Kiri.PERSONALITIES[app.race.teams[st.team].controller].name + ')' : '') +
-        '<br>' + C.ARCHETYPES[st.archetype].name + ' · energy ' + st.energy + '/' + st.maxEnergy + ' · strain ' + st.strain + (st.crack ? ' · cracked' : '') + ' · ' + st.points + ' pts';
+        '<br>' + C.ARCHETYPES[st.archetype].name + ' · ' + UI.LANE_NAMES[st.lane] + ' · energy ' + st.energy + '/' + st.maxEnergy + ' · strain ' + st.strain + (st.crack ? ' · galloping' : '');
     };
     root.querySelector('#rideBtn').onclick = ride;
-    root.querySelector('#followBtn').onclick = () => app.renderer.refollow();
     root.querySelector('#quitBtn').onclick = () => {
       if (confirm('Leave this race? Your progress will be lost.')) { Kiri.Store.clearSave(); titleScreen(); }
     };
@@ -303,12 +302,11 @@
     const ghosts = humanRiders().filter((r) => !r.finished).map((r) => {
       const o = app.orders[r.id];
       const p = Kiri.previewOrder(race, r.id, o);
-      const w = Kiri.squareAt(race.stage, p.reach).width;
-      return { id: r.id, square: p.reach, lane: Math.max(0, Math.min(w - 1, r.lane + o.lane)), label: String(o.effort) };
+      return { id: r.id, square: p.reach, lane: p.lane, label: String(o.effort) };
     });
     app.renderer.setGhosts(ghosts, app.selected);
     root.querySelector('#rideBtn').disabled = app.busy || race.over;
-    root.querySelector('#hint').textContent = UI.shelterHint(race.wind);
+    root.querySelector('#hint').textContent = UI.positionHint();
   }
 
   function refreshRace() {
@@ -316,7 +314,7 @@
     root.querySelector('#turnChip').textContent = 'Turn ' + Math.min(race.turn, C.TURN_CAP) + ' / ' + C.TURN_CAP;
     const mine = humanRiders().filter((r) => !r.finished);
     const best = mine.length ? Math.max.apply(null, mine.map((r) => r.square)) : race.stage.finish;
-    root.querySelector('#toGo').textContent = mine.length ? (race.stage.finish - best) + ' squares to go' : 'Your riders are home';
+    root.querySelector('#toGo').textContent = mine.length ? (race.stage.finish - best) * C.SEGMENT_M + ' m to go' : 'Your horses are home';
     root.querySelector('#standings').innerHTML = UI.standingsTable(race, 0);
     root.querySelector('#log').innerHTML = UI.logHtml(race, 0);
     refreshControls();
@@ -333,7 +331,9 @@
     const entries = state.log.filter((e) => e.turn === state.turn - 1);
     const has = (pred) => entries.some((e) => e.notes.some(pred));
     if (has((n) => n.startsWith('finishes'))) Kiri.Sound.play('finish');
-    else if (has((n) => n.startsWith('sprint'))) Kiri.Sound.play('sprint');
+    // The bell rings as the leaders start the last lap.
+    const lastLap = state.stage.finish - C.LAP;
+    if (entries.some((e) => e.from < lastLap && e.to >= lastLap) && !state.log.some((e) => e.turn < state.turn - 1 && e.to >= lastLap)) Kiri.Sound.play('sprint');
     if (entries.some((e) => e.cracked && state.riders[e.rider].team === 0)) Kiri.Sound.play('crack');
   }
 
@@ -388,19 +388,31 @@
 
   // ---------- Results ----------
   function resultsTable(state, rows, pointsOf, human) {
-    return '<table class="results"><tr><th>#</th><th>Rider</th><th>Team</th><th>Type</th><th>Pts</th></tr>' + rows.map((row, i) => {
+    return '<table class="results"><tr><th>#</th><th>Horse</th><th>Stable</th><th>Type</th><th>Prize</th></tr>' + rows.map((row, i) => {
       const r = state.riders[row.id];
       return '<tr class="' + (r.team === human ? 'me' : '') + '"><td>' + (i + 1) + (r.capped ? '*' : '') + '</td><td>' + UI.dot(state, r, 20) + ' ' + esc(UI.riderName(r)) + '</td><td>' +
-        esc(state.teams[r.team].name) + '</td><td>' + C.ARCHETYPES[r.archetype].name + '</td><td><b>' + pointsOf(row) + '</b></td></tr>';
+        esc(state.teams[r.team].name) + '</td><td>' + C.ARCHETYPES[r.archetype].name + '</td><td><b>' + UI.euros(pointsOf(row)) + '</b></td></tr>';
     }).join('') + '</table>';
   }
 
   function teamTable(state, teams) {
-    return '<table class="results"><tr><th>#</th><th>Team</th><th>Rides like</th><th>Pts</th></tr>' + teams.map((t, i) => {
+    return '<table class="results"><tr><th>#</th><th>Stable</th><th>Drives like</th><th>Earnings</th></tr>' + teams.map((t, i) => {
       const tm = state.teams[t.id];
       return '<tr class="' + (t.id === 0 ? 'me' : '') + '"><td>' + (i + 1) + '</td><td><span class="mini" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + tm.color + '"></span> ' + esc(tm.name) +
-        '</td><td class="muted">' + (tm.controller === 'human' ? 'You' : Kiri.PERSONALITIES[tm.controller].name) + '</td><td><b>' + t.points + '</b></td></tr>';
+        '</td><td class="muted">' + (tm.controller === 'human' ? 'You' : Kiri.PERSONALITIES[tm.controller].name) + '</td><td><b>' + UI.euros(t.points) + '</b></td></tr>';
     }).join('') + '</table>';
+  }
+
+  // How each of the player's horses spent the race: turns in cover, in the death seat, wide.
+  function tripSummary(race) {
+    return race.riders.filter((r) => r.team === 0).map((r) => {
+      const log = race.log.filter((e) => e.rider === r.id);
+      const count = (pred) => log.filter(pred).length;
+      const cover = count((e) => e.position === 'cover');
+      return '<li><b>' + esc(UI.riderName(r)) + '</b>: ' + cover + (cover === 1 ? ' turn' : ' turns') + ' in cover, ' +
+        count((e) => e.position === 'deathSeat') + ' in the death seat, ' + count((e) => e.notes.includes('wide in the curve')) + ' wide in a curve' +
+        (count((e) => e.cracked) ? ', <span style="color:var(--bad)">galloped ' + count((e) => e.cracked) + '×</span>' : '') + '.</li>';
+    }).join('');
   }
 
   function resultsScreen() {
@@ -415,13 +427,13 @@
       app.tour = Kiri.recordStage(app.tour, race);
       const ts = Kiri.tourStandings(app.tour, race);
       const done = Kiri.tourOver(app.tour);
-      // Between stages the save still holds the finished race and the tour before this stage
+      // Between races the save still holds the finished race and the series before this race
       // was recorded, so continuing re-shows this screen with the same totals.
       if (done) Kiri.Store.clearSave();
-      tourBlock = '<h2 style="margin:26px 0 10px">' + (done ? 'Final tour standings' : 'Tour standings after stage ' + app.tour.index) + '</h2><div class="two-col"><div class="card">' +
+      tourBlock = '<h2 style="margin:26px 0 10px">' + (done ? 'Final series standings' : 'Series standings after race ' + app.tour.index) + '</h2><div class="two-col"><div class="card">' +
         resultsTable(race, ts.riders.slice(0, 10), (row) => row.points, 0) + '</div><div class="card">' + teamTable(race, ts.teams) + '</div></div>';
       buttons = done ? '<button class="btn primary big" data-go="title">Back to menu</button>'
-        : '<button class="btn primary big" data-go="next">Stage ' + (app.tour.index + 1) + ': ' + esc(app.tour.stages[app.tour.index].name) + ' ▶</button>';
+        : '<button class="btn primary big" data-go="next">Race ' + (app.tour.index + 1) + ': ' + esc(app.tour.stages[app.tour.index].name) + ' ▶</button>';
     } else {
       Kiri.Store.clearSave();
       buttons = '<button class="btn primary big" data-go="rematch">Rematch</button><button class="btn" data-go="custom">New custom race</button><button class="btn" data-go="title">Menu</button>';
@@ -432,13 +444,14 @@
       const r = race.riders[row.id];
       return '<div class="p' + (i + 1) + '"><div class="place">' + (i + 1) + '</div>' + UI.dot(race, r, 30) + '<div><b>' + esc(UI.riderName(r)) + '</b></div><div class="muted small">' + esc(race.teams[r.team].name) + '</div></div>';
     }).join('');
-    const headline = winner.team === 0 ? 'Stage win for ' + esc(UI.riderName(winner)) + '!' : esc(UI.riderName(winner)) + ' wins ' + esc(race.stage.name);
-    show('<div class="page"><div class="page-head"><div><h1>' + headline + '</h1><div class="muted">Your best rider: ' +
-      myBest.place + '. place · decided in ' + (race.turn - 1) + ' turns</div></div></div>' +
+    const headline = winner.team === 0 ? esc(UI.riderName(winner)) + ' wins for your stable!' : esc(UI.riderName(winner)) + ' wins the ' + esc(race.stage.name);
+    show('<div class="page"><div class="page-head"><div><h1>' + headline + '</h1><div class="muted">Your best horse: ' +
+      myBest.place + '. place · ' + race.stage.meters + ' m in ' + (race.turn - 1) + ' turns</div></div></div>' +
       '<div class="podium">' + podium + '</div>' +
-      '<div class="two-col"><div class="card"><h3 style="margin-bottom:8px">Stage result</h3>' + resultsTable(race, sd.riders, (row) => row.points, 0) +
-      (race.riders.some((r) => r.capped) ? '<div class="muted small">* still racing at the turn cap</div>' : '') +
-      '</div><div class="card"><h3 style="margin-bottom:8px">Teams</h3>' + teamTable(race, sd.teams) + '</div></div>' + tourBlock +
+      '<div class="card" style="margin-bottom:14px"><h3 style="margin-bottom:6px">Your trip</h3><ul style="margin:0;padding-left:18px">' + tripSummary(race) + '</ul></div>' +
+      '<div class="two-col"><div class="card"><h3 style="margin-bottom:8px">Result</h3>' + resultsTable(race, sd.riders, (row) => row.points, 0) +
+      (race.riders.some((r) => r.capped) ? '<div class="muted small">* still on the track at the turn cap</div>' : '') +
+      '</div><div class="card"><h3 style="margin-bottom:8px">Stables</h3>' + teamTable(race, sd.teams) + '</div></div>' + tourBlock +
       '<div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap" id="resBtns">' + buttons + '</div></div>');
     root.querySelector('#resBtns').addEventListener('click', (e) => {
       const go = e.target.dataset.go;
@@ -455,23 +468,28 @@
     app.screen = 'rules';
     const costs = C.EFFORT_COST.slice(1).map((c, i) => '<td>' + (i + 1) + '</td>').join('');
     const costRow = C.EFFORT_COST.slice(1).map((c) => '<td><b>' + c + '</b></td>').join('');
+    const A = C.ARCHETYPES;
     show('<div class="page rules"><div class="page-head"><h1>How to play</h1><button class="btn" id="back">← Back</button></div><div class="card">' +
-      '<p>You manage two riders in a race against AI teams. Each turn every rider picks an <b>effort</b> from 1 to 9 and a <b>lane</b>. Then everyone moves at once, starting from the front of the race. The first rider over the line wins the stage; points decide the team classification.</p>' +
-      '<h2>Moving</h2><p>Effort E gives a budget of 2×E. Each square costs budget to enter: <b>flat 2</b>, <b>descent 1</b>, <b>cobbles 3</b>, <b>climb 4</b>. So effort 6 means 6 squares on the flat but only 3 up a climb. You always move at least one square.</p>' +
-      '<p>If the square you reach is full, you stop on the furthest square behind it with a free lane. You take the free lane closest to your lane choice.</p>' +
-      '<h2>Energy</h2><table class="results" style="width:auto"><tr><td>Effort</td>' + costs + '</tr><tr><td>Energy cost</td>' + costRow + '</tr></table>' +
-      '<p>Energy has to last the whole stage. Freewheeling down a descent at effort 4 or less recovers 2 energy.</p>' +
-      '<h2>Strain</h2><p>Strain shows short-term fatigue, from 0 to 10. Each turn it changes by effort − 5, so effort 8 adds 3 and effort 3 removes 2. If it hits 10 the rider <b>cracks</b>: for two turns their effort is capped at 3.</p>' +
-      '<h2>Shelter and wind</h2><p>A rider who starts the turn in another rider\'s wind shadow pays less energy and sheds an extra point of strain. Where the shadow is depends on the wind:</p><ul>' +
-      '<li><b>Calm</b> or <b>headwind</b>: directly behind a rider. Saves 30% in calm, 50% in a headwind.</li>' +
-      '<li><b>Crosswind</b>: one square behind and one lane away from the wind. Saves 40%. The rider at the edge of the road in the gutter gets no shelter, so echelons form.</li>' +
-      '<li>Nobody gets shelter on a climb.</li></ul>' +
-      '<h2>Riders</h2><ul><li><b>Rouleur</b>: 110 energy, cobbles cost only 2.</li><li><b>Climber</b>: 100 energy, climbs cost only 3.</li>' +
-      '<li><b>Sprinter</b>: 95 energy, climbs cost 5. <b>Kick</b>: in the last 12 squares, effort 7+ gives 2 extra squares.</li></ul>' +
-      '<h2>Points</h2><p>Sprint line: 5 / 3 / 1 for the first three across. Finish: 15, 12, 10, 8, 6, 5, 4, 3, 2, 1. After 60 turns the race is stopped.</p>' +
+      '<p>You drive two trotters from your stable against AI stables on a 1000 m oval. Horses run counter-clockwise, and lane 1 is the rail. Each turn every horse gets a <b>speed</b> from 1 to 9 and a lane move (<b>inside</b>, <b>keep</b> or <b>outside</b>). Then all horses move at once, starting with the one in front. Prize money goes to the first eight.</p>' +
+      '<h2>Moving</h2><p>Speed S gives a budget of 2×S. A track segment is 25 m. Each segment costs <b>2</b> on the straights. In the curves the outer lanes are longer: lanes 1–2 cost <b>2</b>, lane 3 costs <b>3</b> and lane 4 costs <b>4</b>. Moving out pays the outer lane\'s price straight away.</p>' +
+      '<p>A horse can move only one lane per turn, and never into a lane where another horse is right alongside it. That is how you get <b>boxed in</b> on the rail. If the segment you would reach is full, you stop on the nearest free one behind it.</p>' +
+      '<h2>Energy and position</h2><table class="results" style="width:auto"><tr><td>Speed</td>' + costs + '</tr><tr><td>Base cost</td>' + costRow + '</tr></table>' +
+      '<p>The base cost is multiplied by where the horse is at the start of the turn:</p><ul>' +
+      '<li><b>In cover</b> (a horse right in front, same lane): ×' + C.COVER_MULT[0] + ' on the rail, ×' + C.COVER_MULT[1] + ' in lane 2, ×' + C.COVER_MULT[2] + ' in lanes 3–4.</li>' +
+      '<li><b>Open</b> (nobody in front): ×' + C.OPEN_MULT.join(' / ×') + ' in lanes 1 / 2 / 3 / 4.</li>' +
+      '<li><b>Death seat</b> (lane 2, outside a horse on the rail, nobody in front): ×' + C.DEATH_SEAT_MULT + ', and strain rises 1 more.</li>' +
+      '<li><b>Wide in a curve</b> (lane 3 or 4 on a curve segment): a further ×' + C.WIDE_CURVE_MULT + '.</li></ul>' +
+      '<p>An exhausted horse (energy 0) can still trot at speed 1–3 for free.</p>' +
+      '<h2>Strain and galloping</h2><p>Strain runs from 0 to 10. Each turn it changes by speed − 5: one less in cover, one more in the death seat. At 10 the horse <b>breaks into a gallop</b>, and the driver has to settle it: its speed is capped at 3 for two turns.</p>' +
+      '<h2>Horses</h2><ul><li><b>' + A.stayer.name + '</b>: ' + A.stayer.energy + ' energy. ' + A.stayer.blurb + '</li>' +
+      '<li><b>' + A.closer.name + '</b>: ' + A.closer.energy + ' energy. ' + A.closer.blurb + '</li>' +
+      '<li><b>' + A.gate.name + '</b>: ' + A.gate.energy + ' energy. ' + A.gate.blurb + '</li></ul>' +
+      '<h2>Prize money</h2><p>' + C.PURSE.map((p) => UI.euros(p)).join(' · ') + '. After ' + C.TURN_CAP + ' turns the race is stopped.</p>' +
       '<h2>Rivals</h2><ul>' + Object.keys(Kiri.PERSONALITIES).map((k) => '<li><b>' + Kiri.PERSONALITIES[k].name + '</b>: ' + Kiri.PERSONALITIES[k].blurb + '</li>').join('') + '</ul>' +
-      '<h2>Tips</h2><ul><li>Effort 5 is strain-neutral. Above it you spend strain you need to recover later.</li><li>Before a climb, check your energy: climbs are slow and you get no shelter.</li>' +
-      '<li>In a crosswind, pick your lane so you finish the turn diagonally behind someone.</li><li>Sprinters: save energy, stay close, and let the Kick do the work.</li></ul></div></div>');
+      '<h2>Tips</h2><ul><li>The best trip is usually in the pocket: on the rail, right behind the leader.</li>' +
+      '<li>Don\'t sit in the death seat for long. If you go to the front, go all the way.</li>' +
+      '<li>Make your move from lane 3 on a straight. In a curve it costs much more.</li>' +
+      '<li>Pull out of the pocket before the horse outside you shuts the door.</li></ul></div></div>');
     root.querySelector('#back').onclick = () => { if (prevScreen === 'race') raceScreen(); else back(); };
   }
 
