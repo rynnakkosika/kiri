@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kiri tests</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; background: #fafaf7; color: #222; }
+    h2 { font-size: 15px; margin: 18px 0 4px; }
+    .pass { color: #1f7a3a; }
+    .fail { color: #b3261e; font-weight: 600; }
+    #summary { font-size: 18px; font-weight: 700; }
+    pre { background: #eee; padding: 8px; }
+  </style>
+</head>
+<body>
+  <div id="summary">running…</div>
+  <div id="out"></div>
+  <script src="../src/engine/constants.js"></script>
+  <script src="../src/engine/rng.js"></script>
+  <script src="../src/engine/rules.js"></script>
+  <script src="../src/engine/stages.js"></script>
+  <script src="../src/engine/race.js"></script>
+  <script src="../src/engine/tour.js"></script>
+  <script src="../src/ai/bots.js"></script>
+  <script src="runner.js"></script>
+  <script src="helpers.js"></script>
+  <script src="rules.test.js"></script>
+  <script src="stages.test.js"></script>
+  <script src="race.test.js"></script>
+  <script src="ai.test.js"></script>
+  <script>runTests();</script>
+</body>
+</html>
