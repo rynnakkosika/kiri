@@ -17,6 +17,10 @@ Open `index.html` in a browser. Double-clicking it works, with no install or bui
   riders' types.
 - **Tour**: three stages, with points added up across them.
 - **How to play**: the full rules, in the game.
+- **Difficulty**: Easy, Normal or Hard. It only changes how the AI decides, never the rules.
+- **Continue**: the game saves after every turn. After a reload, the title screen offers to continue.
+- **Sound**: synthesized effects; the 🔊 button mutes them, and the setting is remembered.
+- Also plays on a phone (360 px and wider): tap a rider to see its stats.
 
 Keyboard: <kbd>1</kbd>–<kbd>9</kbd> effort, <kbd>←</kbd>/<kbd>→</kbd> lane, <kbd>Tab</kbd> switch rider, <kbd>Enter</kbd> ride.
 

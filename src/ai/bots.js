@@ -10,6 +10,13 @@
     planner: { name: 'Planner', blurb: 'Weighs every square against the energy left.' },
   };
 
+  // Difficulty changes only how bots decide (score noise, personality mix), never the rules.
+  const DIFFICULTY = {
+    easy: { name: 'Easy', noise: 3, lapse: 0.35, allInRange: 10, pool: ['diesel', 'wheelsucker', 'attacker'] },
+    normal: { name: 'Normal', noise: 0.6, lapse: 0, allInRange: 30, pool: ['diesel', 'wheelsucker', 'attacker', 'planner'] },
+    hard: { name: 'Hard', noise: 0, lapse: 0, allInRange: 40, pool: ['planner', 'planner', 'attacker', 'wheelsucker', 'planner'] },
+  };
+
   // Guess where every other rider ends up: same distance as their last move.
   function predictOthers(state, me) {
     const last = {};
@@ -105,9 +112,10 @@
     return s;
   }
 
-  function chooseOrders(state, teamId, rand) {
+  function chooseOrders(state, teamId, rand, difficulty) {
     const team = state.teams[teamId];
     const kind = PERSONALITIES[team.controller] ? team.controller : 'diesel';
+    const d = DIFFICULTY[difficulty] || DIFFICULTY.normal;
     const orders = {};
     for (const r of state.riders) {
       if (r.team !== teamId || r.finished) continue;
@@ -117,12 +125,19 @@
       const ctx = {
         sustain: sustainableEffort(state, r),
         median: fieldMedian(others),
-        allIn: canGoAllIn(state, r, top) && state.stage.finish - r.square <= 30,
+        allIn: canGoAllIn(state, r, top) && state.stage.finish - r.square <= d.allInRange,
       };
+      // A lapse: misjudge the tempo, either overcooking it or dawdling.
+      if (rand && d.lapse && !ctx.allIn && rand() < d.lapse) {
+        const want = rand() < 0.5 ? ctx.sustain + 1 + Math.floor(rand() * 3) : ctx.sustain - 2 - Math.floor(rand() * 2);
+        const effort = legal.reduce((b, e) => (Math.abs(e - want) < Math.abs(b - want) ? e : b), legal[0]);
+        orders[r.id] = { effort, lane: 0 };
+        continue;
+      }
       let best = null;
       let bestScore = -Infinity;
       for (const o of options(state, r, others)) {
-        const sc = score(kind, state, r, o, ctx) + (rand ? rand() * 0.6 : 0);
+        const sc = score(kind, state, r, o, ctx) + (rand ? rand() * d.noise : 0);
         if (sc > bestScore) { bestScore = sc; best = o; }
       }
       orders[r.id] = { effort: best.effort, lane: best.lane };
@@ -130,5 +145,5 @@
     return orders;
   }
 
-  Object.assign(Kiri, { PERSONALITIES, chooseOrders, sustainableEffort });
+  Object.assign(Kiri, { PERSONALITIES, DIFFICULTY, chooseOrders, sustainableEffort });
 })(window.Kiri = window.Kiri || {});

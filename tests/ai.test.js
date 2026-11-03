@@ -50,6 +50,32 @@ describe('AI (US4)', () => {
     expect(performance.now() - t0).toBeLessThan(100);
   });
 
+  it('difficulty: a reference team wins ≥1.5× as often against Easy fields as against Hard (002 SC-001)', () => {
+    const N = 60;
+    const refWins = (difficulty) => {
+      let wins = 0;
+      for (let seed = 1; seed <= N; seed++) {
+        const rand = Kiri.rng(seed * 7 + 1);
+        const pool = Kiri.DIFFICULTY[difficulty].pool;
+        const teams = [{ name: 'ref', color: '#000', controller: 'planner', archetypes: ['rouleur', 'sprinter'] }];
+        for (let i = 0; i < 3; i++) teams.push({ name: 'ai' + i, color: '#000', controller: pool[(seed + i) % pool.length], archetypes: ['rouleur', 'sprinter'] });
+        let s = Kiri.createRace({ stage: Kiri.PRESET_STAGES[seed % 3], teams, seed });
+        while (!s.over) {
+          const o = {};
+          s.teams.forEach((t) => Object.assign(o, Kiri.chooseOrders(s, t.id, rand, t.id === 0 ? 'normal' : difficulty)));
+          s = Kiri.resolveTurn(s, o);
+        }
+        if (s.riders[s.finishOrder[0]].team === 0) wins++;
+      }
+      return wins;
+    };
+    const easy = refWins('easy');
+    const normal = refWins('normal');
+    const hard = refWins('hard');
+    report('Difficulty: reference team stage wins out of ' + N + ' vs easy ' + easy + ', normal ' + normal + ', hard ' + hard);
+    expect(easy).toBeGreaterThan(hard * 1.5);
+  });
+
   it('100 all-AI races finish within the cap; balance and personality report (SC-004)', () => {
     const ctrls = ['diesel', 'wheelsucker', 'attacker', 'planner'];
     const wins = {};

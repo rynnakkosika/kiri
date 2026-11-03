@@ -11,13 +11,20 @@
   const HUMAN_COLOR = '#e4572e';
   const SURNAMES = ['Virtanen', 'Korhonen', 'Nieminen', 'Mäkinen', 'Hämäläinen', 'Laine', 'Heikkinen', 'Koskinen', 'Järvinen', 'Lehtonen',
     'Saarinen', 'Salminen', 'Kinnunen', 'Turunen', 'Salo', 'Lindqvist', 'Rantanen', 'Karjalainen', 'Lahtinen', 'Peltonen'];
+  const DIFFICULTY_BLURB = {
+    easy: 'Rivals misjudge their pace and sprint late. Good for learning.',
+    normal: 'A mixed field of all four personalities.',
+    hard: 'Mostly Planners, no mistakes, early sprints. Same rules for everyone.',
+  };
   const AI_ARCHES = [['rouleur', 'sprinter'], ['climber', 'rouleur'], ['sprinter', 'climber'], ['rouleur', 'climber'], ['climber', 'sprinter']];
 
   const app = {
     screen: 'title',
     setup: {
       stage: 0, seed: 42, wind: 'default', aiTeams: 3, archetypes: ['rouleur', 'sprinter'], teamName: 'Sisu Cycling',
+      difficulty: Kiri.Store.prefs().difficulty,
     },
+    difficulty: 'normal',
     race: null,
     raceSetup: null,
     tour: null,
@@ -37,17 +44,23 @@
   // ---------- Title ----------
   function titleScreen() {
     app.screen = 'title';
+    const save = Kiri.Store.loadSave();
+    const cont = save
+      ? '<button class="btn primary" data-go="continue">Continue: ' + esc(save.race.stage.name) +
+        (save.tour ? ' (tour stage ' + (save.tour.index + 1) + '/3)' : '') + (save.race.over ? ', results' : ', turn ' + save.race.turn) + '</button>'
+      : '';
     show('<div class="title-screen"><div class="title-card">' +
       '<div class="logo">KIR<span>I</span></div>' +
       '<div class="tagline">A tactical cycling race. Spend your energy wisely, ride in the wind shadow, and time your final push.</div>' +
-      '<div class="menu">' +
-      '<button class="btn primary" data-go="quick">Quick race</button>' +
+      '<div class="menu">' + cont +
+      '<button class="btn' + (save ? '' : ' primary') + '" data-go="quick">Quick race</button>' +
       '<button class="btn" data-go="custom">Custom race</button>' +
       '<button class="btn" data-go="tour">Tour: 3 stages</button>' +
       '<button class="btn" data-go="rules">How to play</button>' +
       '</div><p class="muted small" style="margin-top:28px">Two riders. Nine effort levels. One finish line.</p></div></div>');
     root.querySelector('.menu').addEventListener('click', (e) => {
       const go = e.target.dataset.go;
+      if (go === 'continue') continueSaved(save);
       if (go === 'quick') startQuick();
       if (go === 'custom') setupScreen('custom');
       if (go === 'tour') setupScreen('tour');
@@ -81,6 +94,8 @@
       '<button class="btn" id="back">← Back</button></div>' +
       '<div class="setup-grid"><div class="card">' + stageField +
       '<div class="field"><label>AI teams</label>' + seg('aiTeams', [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5']], s.aiTeams) + '<div class="muted small">Each AI team has a personality: Diesel, Wheelsucker, Attacker or Planner.</div></div>' +
+      '<div class="field"><label>Difficulty</label>' + seg('difficulty', Object.keys(Kiri.DIFFICULTY).map((k) => [k, Kiri.DIFFICULTY[k].name]), s.difficulty) +
+      '<div class="muted small">' + DIFFICULTY_BLURB[s.difficulty] + '</div></div>' +
       '</div><div class="card">' +
       '<div class="field"><label>Team name</label><input type="text" id="teamName" maxlength="24" value="' + esc(s.teamName) + '" style="width:100%"></div>' +
       [0, 1].map((i) => '<div class="field"><label>Rider ' + (i + 1) + '</label>' + seg('arch' + i, archOpts, s.archetypes[i]) +
@@ -95,6 +110,7 @@
       if (k === 'stage') s.stage = v === 'random' ? 'random' : Number(v);
       else if (k === 'wind') s.wind = v;
       else if (k === 'aiTeams') s.aiTeams = Number(v);
+      else if (k === 'difficulty') { s.difficulty = v; Kiri.Store.setPref('difficulty', v); }
       else if (k === 'arch0') s.archetypes[0] = v;
       else if (k === 'arch1') s.archetypes[1] = v;
       s.teamName = root.querySelector('#teamName').value;
@@ -150,7 +166,8 @@
   function buildSetup(stage, wind, seed, aiCount, archetypes, teamName) {
     const s = app.setup;
     const rand = Kiri.rng(seed);
-    const personalities = rand.shuffle(Object.keys(Kiri.PERSONALITIES));
+    const difficulty = s.difficulty;
+    const personalities = rand.shuffle(Kiri.DIFFICULTY[difficulty].pool);
     const names = rand.shuffle(SURNAMES);
     const n = aiCount || s.aiTeams;
     const teams = [{ name: teamName || s.teamName, color: HUMAN_COLOR, controller: 'human', archetypes: (archetypes || s.archetypes).slice(), riderNames: [names[0], names[1]] }];
@@ -160,7 +177,7 @@
         archetypes: AI_ARCHES[(i + seed) % AI_ARCHES.length], riderNames: [names[2 + i * 2], names[3 + i * 2]],
       });
     }
-    return { stage, wind, teams, seed };
+    return { stage, wind, teams, seed, difficulty };
   }
 
   function startQuick() {
@@ -178,12 +195,35 @@
 
   function startRace(setup) {
     app.raceSetup = setup;
+    app.difficulty = setup.difficulty || 'normal';
     app.race = Kiri.createRace(setup);
     app.orders = {};
     app.selected = null;
     app.busy = false;
     defaultOrders();
+    autosave();
     raceScreen();
+  }
+
+  function autosave(race) {
+    Kiri.Store.writeSave({
+      race: race || app.race, raceSetup: app.raceSetup, tour: app.tour, tourSetup: app.tourSetup || null,
+      orders: app.orders, difficulty: app.difficulty,
+    });
+  }
+
+  function continueSaved(save) {
+    app.raceSetup = save.raceSetup;
+    app.race = save.race;
+    app.tour = save.tour || null;
+    app.tourSetup = save.tourSetup || null;
+    app.difficulty = save.difficulty || 'normal';
+    app.orders = save.orders || {};
+    app.selected = null;
+    app.busy = false;
+    defaultOrders();
+    if (app.race.over) resultsScreen();
+    else raceScreen();
   }
 
   function humanRiders() { return app.race.riders.filter((r) => r.team === 0); }
@@ -207,13 +247,13 @@
     const tourLabel = app.tour ? '<span class="chip">Tour stage ' + (app.tour.index + 1) + '/3</span>' : '';
     show('<div class="race">' +
       '<div class="topbar"><span class="logo-sm">KIR<span>I</span></span><span class="stage-name">' + esc(race.stage.name) + '</span>' + tourLabel +
-      UI.windChip(race.wind) + '<span class="chip" id="turnChip"></span><span class="chip" id="toGo"></span><span class="spacer"></span>' +
-      '<button class="btn" id="rulesBtn">Rules</button><button class="btn" id="quitBtn">Quit</button></div>' +
+      UI.windChip(race.wind) + '<span class="chip">' + Kiri.DIFFICULTY[app.difficulty].name + '</span><span class="chip" id="turnChip"></span><span class="chip" id="toGo"></span><span class="spacer"></span>' +
+      '<button class="btn" id="muteBtn" title="Sound on/off"></button><button class="btn" id="rulesBtn">Rules</button><button class="btn" id="quitBtn">Quit</button></div>' +
       '<div class="track-wrap"><canvas id="track"></canvas><div class="track-tools"><button class="btn" id="followBtn">Follow my riders</button></div><div class="tooltip" id="tip" hidden></div></div>' +
       '<canvas id="profile" title="Stage profile: click to look there"></canvas>' +
       '<div class="race-main"><div class="controls"><div class="rider-cards" id="cards"></div>' +
       '<div class="ride-row"><button class="btn primary big" id="rideBtn">Ride ▶</button>' +
-      '<span class="muted small"><kbd>1</kbd>–<kbd>9</kbd> effort · <kbd>←</kbd>/<kbd>→</kbd> lane · <kbd>Tab</kbd> switch rider · <kbd>Enter</kbd> ride</span>' +
+      '<span class="muted small kbd-hint"><kbd>1</kbd>–<kbd>9</kbd> effort · <kbd>←</kbd>/<kbd>→</kbd> lane · <kbd>Tab</kbd> switch rider · <kbd>Enter</kbd> ride</span>' +
       '<span class="muted small" id="hint"></span></div></div>' +
       '<div class="side"><div class="card"><h3>Race</h3><div id="standings"></div></div><div class="card"><h3>Race log</h3><div class="log" id="log"></div></div></div></div></div>');
 
@@ -232,7 +272,13 @@
     };
     root.querySelector('#rideBtn').onclick = ride;
     root.querySelector('#followBtn').onclick = () => app.renderer.refollow();
-    root.querySelector('#quitBtn').onclick = () => { if (confirm('Leave this race?')) titleScreen(); };
+    root.querySelector('#quitBtn').onclick = () => {
+      if (confirm('Leave this race? Your progress will be lost.')) { Kiri.Store.clearSave(); titleScreen(); }
+    };
+    const mute = root.querySelector('#muteBtn');
+    const paintMute = () => { mute.textContent = Kiri.Sound.isMuted() ? '🔇' : '🔊'; };
+    mute.onclick = () => { Kiri.Sound.setMuted(!Kiri.Sound.isMuted()); paintMute(); };
+    paintMute();
     root.querySelector('#rulesBtn').onclick = () => rulesScreen(raceScreen);
     root.querySelector('#cards').addEventListener('click', onCardClick);
     refreshRace();
@@ -279,8 +325,16 @@
   function aiOrders(state) {
     const rand = Kiri.rng(app.raceSetup.seed * 1009 + state.turn);
     const orders = {};
-    for (const t of state.teams) if (t.controller !== 'human') Object.assign(orders, Kiri.chooseOrders(state, t.id, rand));
+    for (const t of state.teams) if (t.controller !== 'human') Object.assign(orders, Kiri.chooseOrders(state, t.id, rand, app.difficulty));
     return orders;
+  }
+
+  function turnSounds(state) {
+    const entries = state.log.filter((e) => e.turn === state.turn - 1);
+    const has = (pred) => entries.some((e) => e.notes.some(pred));
+    if (has((n) => n.startsWith('finishes'))) Kiri.Sound.play('finish');
+    else if (has((n) => n.startsWith('sprint'))) Kiri.Sound.play('sprint');
+    if (entries.some((e) => e.cracked && state.riders[e.rider].team === 0)) Kiri.Sound.play('crack');
   }
 
   function ride() {
@@ -289,13 +343,17 @@
     const orders = Object.assign(aiOrders(prev), {});
     for (const r of humanRiders()) if (!r.finished) orders[r.id] = app.orders[r.id];
     const next = Kiri.resolveTurn(prev, orders);
+    // Save the resolved turn now, so a reload mid-animation doesn't replay it.
+    autosave(next);
     app.busy = true;
+    Kiri.Sound.play('ride');
     refreshControls();
     app.renderer.animateTo(next, () => {
       app.race = next;
       app.busy = false;
       defaultOrders();
       if (app.screen !== 'race') return;
+      turnSounds(next);
       refreshRace();
       if (next.over) setTimeout(resultsScreen, 900);
       // Skip ahead automatically once both human riders are home.
@@ -357,11 +415,15 @@
       app.tour = Kiri.recordStage(app.tour, race);
       const ts = Kiri.tourStandings(app.tour, race);
       const done = Kiri.tourOver(app.tour);
+      // Between stages the save still holds the finished race and the tour before this stage
+      // was recorded, so continuing re-shows this screen with the same totals.
+      if (done) Kiri.Store.clearSave();
       tourBlock = '<h2 style="margin:26px 0 10px">' + (done ? 'Final tour standings' : 'Tour standings after stage ' + app.tour.index) + '</h2><div class="two-col"><div class="card">' +
         resultsTable(race, ts.riders.slice(0, 10), (row) => row.points, 0) + '</div><div class="card">' + teamTable(race, ts.teams) + '</div></div>';
       buttons = done ? '<button class="btn primary big" data-go="title">Back to menu</button>'
         : '<button class="btn primary big" data-go="next">Stage ' + (app.tour.index + 1) + ': ' + esc(app.tour.stages[app.tour.index].name) + ' ▶</button>';
     } else {
+      Kiri.Store.clearSave();
       buttons = '<button class="btn primary big" data-go="rematch">Rematch</button><button class="btn" data-go="custom">New custom race</button><button class="btn" data-go="title">Menu</button>';
     }
     const podium = [1, 0, 2].map((i) => {
