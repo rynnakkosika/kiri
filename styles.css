@@ -175,3 +175,14 @@ kbd { background: var(--chip); border-radius: 4px; padding: 1px 6px; font-size: 
   table.results th, table.results td { padding: 5px 4px; }
   .logo { font-size: 56px; }
 }
+
+/* Online play */
+.game-code { font-size: 40px; font-weight: 900; letter-spacing: 8px; font-family: ui-monospace, Consolas, monospace; }
+.net-banner {
+  position: fixed; left: 50%; top: 16px; transform: translateX(-50%); z-index: 50; width: min(520px, calc(100% - 32px));
+  background: var(--panel); border: 2px solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 14px 16px; display: grid; gap: 10px; font-weight: 600;
+}
+.net-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.pulse { color: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .2; } }

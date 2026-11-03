@@ -29,6 +29,20 @@ Open `index.html` in a browser. Double-clicking it works, with no install or bui
 - **Sound**: hooves, a last-lap bell, a whinny for a gallop and a finish chord. The 🔊 button mutes them.
 - Also plays on a phone (360 px and wider): tap a horse to see its stats.
 
+## Play with a friend
+
+Choose **Play with a friend → Host**, set up the race and press **Create game**. You get a
+6-character code and an invite link. Your friend opens the link (or chooses **Join** and types the
+code), picks a stable name and horses, and you press **Start the race**. Each turn you both choose
+speeds and lanes, and the turn runs when both of you have locked in. AI stables can join too (0–4).
+
+- The host's browser runs the race. If the friend drops out, the host can continue with the AI
+  driving their stable.
+- The connection is peer-to-peer (WebRTC). A free public service (PeerJS) only introduces the two
+  browsers to each other. The PeerJS library is loaded only when you open the online menu.
+- Your friend needs to reach the game on the web, so the game must be published (for example
+  on GitHub Pages). An invite link to `localhost` or a `file://` page only works on your own computer.
+
 Keyboard: <kbd>1</kbd>–<kbd>9</kbd> speed, <kbd>←</kbd>/<kbd>→</kbd> inside/outside, <kbd>Tab</kbd> switch horse, <kbd>Enter</kbd> drive.
 
 ## Tests
@@ -48,7 +62,8 @@ Then open <http://localhost:8765/>.
 |------|------|
 | `src/engine/` | Pure, seeded rules engine (no DOM). `constants.js` holds every balance number. |
 | `src/ai/bots.js` | AI driving styles: Steady, Pocket sitter, Front runner, Tactician. |
+| `src/net/` | Online play: pure host protocol (`protocol.js`) and PeerJS transport (`peer.js`). |
 | `src/ui/` | Oval renderer, horse cards, screens, storage, sound. |
 | `tests/` | Browser test runner and suites. |
-| `specs/` | Spec Kit features: 001 the cycling original, 002 game feel, 003 harness racing. |
+| `specs/` | Spec Kit features: 001 the cycling original, 002 game feel, 003 harness racing, 004 online play. |
 | `.specify/memory/constitution.md` | Project principles. |

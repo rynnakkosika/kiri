@@ -159,5 +159,14 @@
     return orders;
   }
 
-  Object.assign(Kiri, { PERSONALITIES, DIFFICULTY, chooseOrders, sustainableEffort });
+  // Orders for every AI stable this turn. Seeded by race seed and turn, so the host and a solo
+  // game make the same choices for the same state.
+  function aiOrdersFor(state, seed, difficulty) {
+    const rand = Kiri.rng(seed * 1009 + state.turn);
+    const orders = {};
+    for (const t of state.teams) if (PERSONALITIES[t.controller]) Object.assign(orders, chooseOrders(state, t.id, rand, difficulty));
+    return orders;
+  }
+
+  Object.assign(Kiri, { PERSONALITIES, DIFFICULTY, chooseOrders, aiOrdersFor, sustainableEffort });
 })(window.Kiri = window.Kiri || {});

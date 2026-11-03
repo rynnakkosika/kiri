@@ -26,6 +26,8 @@
       difficulty: Kiri.Store.prefs().difficulty,
     },
     difficulty: 'normal',
+    myTeam: 0, // the stable this browser drives: 0 solo or host, 1 online guest
+    online: null, // { role: 'host' | 'guest', host?: Kiri.OnlineHost, status } during online play
     race: null,
     raceSetup: null,
     tour: null,
@@ -35,6 +37,12 @@
     renderer: null,
     back: null,
   };
+
+  function driverLabel(team) {
+    if (team.id === app.myTeam) return 'You';
+    if (team.controller === 'human') return 'Your friend';
+    return Kiri.PERSONALITIES[team.controller].name;
+  }
 
   function show(html) {
     if (app.renderer) { app.renderer.destroy(); app.renderer = null; }
@@ -57,6 +65,7 @@
       '<button class="btn' + (save ? '' : ' primary') + '" data-go="quick">Quick race</button>' +
       '<button class="btn" data-go="custom">Custom race</button>' +
       '<button class="btn" data-go="tour">Series: 3 races</button>' +
+      '<button class="btn" data-go="online">Play with a friend 🌐</button>' +
       '<button class="btn" data-go="rules">How to play</button>' +
       '</div><p class="muted small" style="margin-top:28px">Two trotters. Nine speeds. One finish post.</p></div></div>');
     root.querySelector('.menu').addEventListener('click', (e) => {
@@ -65,6 +74,7 @@
       if (go === 'quick') startQuick();
       if (go === 'custom') setupScreen('custom');
       if (go === 'tour') setupScreen('tour');
+      if (go === 'online') onlineScreen();
       if (go === 'rules') rulesScreen(titleScreen);
     });
   }
@@ -84,25 +94,31 @@
     app.screen = 'setup';
     const s = app.setup;
     const tour = mode === 'tour';
+    const hosting = mode === 'host';
+    // Online games can have zero AI stables: just you and your friend.
+    if (hosting && s.aiTeams > 4) s.aiTeams = 4;
+    const aiOptions = (hosting ? [[0, '0']] : []).concat([[1, '1'], [2, '2'], [3, '3'], [4, '4']]).concat(hosting ? [] : [[5, '5']]);
     const stageField = tour
       ? '<div class="field"><label>Races</label><div>1. Mile 1609 m · 2. Classic 2100 m · 3. Long 2600 m</div><div class="muted small">Prize money adds up over all three races. Energy and strain reset between races.</div></div>'
       : '<div class="field"><label>Distance</label>' + seg('stage', [[0, 'Mile 1609 m'], [1, 'Classic 2100 m'], [2, 'Long 2600 m'], ['random', 'Random']], s.stage) +
         (s.stage === 'random' ? '<div style="margin-top:6px">Seed <input type="number" id="seed" value="' + esc(s.seed) + '"></div>' : '') +
         '<canvas class="stage-preview" id="stagePreview"></canvas><div class="muted small" id="stageBlurb"></div></div>';
     const archOpts = Object.keys(C.ARCHETYPES).map((k) => [k, C.ARCHETYPES[k].name]);
-    show('<div class="page"><div class="page-head"><div><h1>' + (tour ? 'Series setup' : 'Custom race') + '</h1><div class="muted">Set up the race, then drive.</div></div>' +
+    const title = tour ? 'Series setup' : hosting ? 'Host a game' : 'Custom race';
+    const sub = hosting ? 'Set up the race. Then you get a code and a link for your friend.' : 'Set up the race, then drive.';
+    show('<div class="page"><div class="page-head"><div><h1>' + title + '</h1><div class="muted">' + sub + '</div></div>' +
       '<button class="btn" id="back">← Back</button></div>' +
       '<div class="setup-grid"><div class="card">' + stageField +
-      '<div class="field"><label>AI stables</label>' + seg('aiTeams', [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5']], s.aiTeams) + '<div class="muted small">Each AI stable has a driving style: ' + Object.keys(Kiri.PERSONALITIES).map((k) => Kiri.PERSONALITIES[k].name).join(', ') + '.</div></div>' +
+      '<div class="field"><label>AI stables</label>' + seg('aiTeams', aiOptions, s.aiTeams) + '<div class="muted small">Each AI stable has a driving style: ' + Object.keys(Kiri.PERSONALITIES).map((k) => Kiri.PERSONALITIES[k].name).join(', ') + '.</div></div>' +
       '<div class="field"><label>Difficulty</label>' + seg('difficulty', Object.keys(Kiri.DIFFICULTY).map((k) => [k, Kiri.DIFFICULTY[k].name]), s.difficulty) +
       '<div class="muted small">' + DIFFICULTY_BLURB[s.difficulty] + '</div></div>' +
       '</div><div class="card">' +
       '<div class="field"><label>Stable name</label><input type="text" id="teamName" maxlength="24" value="' + esc(s.teamName) + '" style="width:100%"></div>' +
       [0, 1].map((i) => '<div class="field"><label>Horse ' + (i + 1) + '</label>' + seg('arch' + i, archOpts, s.archetypes[i]) +
         '<div class="muted small">' + esc(C.ARCHETYPES[s.archetypes[i]].blurb) + ' Energy ' + C.ARCHETYPES[s.archetypes[i]].energy + '.</div></div>').join('') +
-      '</div></div><div style="margin-top:18px;text-align:right"><button class="btn primary big" id="start">' + (tour ? 'Start the tour ▶' : 'Start race ▶') + '</button></div></div>');
+      '</div></div><div style="margin-top:18px;text-align:right"><button class="btn primary big" id="start">' + (tour ? 'Start the series ▶' : hosting ? 'Create game ▶' : 'Start race ▶') + '</button></div></div>');
 
-    root.querySelector('#back').onclick = titleScreen;
+    root.querySelector('#back').onclick = hosting ? onlineScreen : titleScreen;
     root.querySelectorAll('[data-seg]').forEach((el) => el.addEventListener('click', (e) => {
       const v = e.target.dataset.v;
       if (v === undefined) return;
@@ -122,6 +138,7 @@
     root.querySelector('#start').onclick = () => {
       s.teamName = root.querySelector('#teamName').value.trim() || 'Talli Sisu';
       if (tour) { startTour(); return; }
+      if (hosting) { hostLobby(); return; }
       app.tour = null;
       const seed = s.stage === 'random' ? Number(s.seed) * 13 + 5 : Math.floor(Math.random() * 100000);
       startRace(buildSetup(setupStage(), seed));
@@ -197,6 +214,8 @@
     app.raceSetup = setup;
     app.difficulty = setup.difficulty || 'normal';
     app.race = Kiri.createRace(setup);
+    app.myTeam = 0;
+    app.online = null;
     app.orders = {};
     app.selected = null;
     app.busy = false;
@@ -206,6 +225,7 @@
   }
 
   function autosave(race) {
+    if (app.online) return; // online races are not saved in v1
     Kiri.Store.writeSave({
       race: race || app.race, raceSetup: app.raceSetup, tour: app.tour, tourSetup: app.tourSetup || null,
       orders: app.orders, difficulty: app.difficulty,
@@ -219,6 +239,8 @@
     app.tourSetup = save.tourSetup || null;
     app.difficulty = save.difficulty || 'normal';
     app.orders = save.orders || {};
+    app.myTeam = 0;
+    app.online = null;
     app.selected = null;
     app.busy = false;
     defaultOrders();
@@ -226,7 +248,7 @@
     else raceScreen();
   }
 
-  function humanRiders() { return app.race.riders.filter((r) => r.team === 0); }
+  function humanRiders() { return app.race.riders.filter((r) => r.team === app.myTeam); }
 
   function defaultOrders() {
     for (const r of humanRiders()) {
@@ -244,7 +266,9 @@
   function raceScreen() {
     app.screen = 'race';
     const race = app.race;
-    const tourLabel = app.tour ? '<span class="chip">Series race ' + (app.tour.index + 1) + '/3</span>' : '';
+    const friend = app.online && race.teams[1 - app.myTeam];
+    const tourLabel = (app.tour ? '<span class="chip">Series race ' + (app.tour.index + 1) + '/3</span>' : '') +
+      (friend ? '<span class="chip good">🌐 Online vs ' + esc(friend.name) + '</span>' : '');
     show('<div class="race">' +
       '<div class="topbar"><span class="logo-sm">KIR<span>I</span></span><span class="stage-name">' + esc(race.stage.name) + ' ' + race.stage.meters + ' m</span>' + tourLabel +
       '<span class="chip">' + Kiri.DIFFICULTY[app.difficulty].name + '</span><span class="chip" id="turnChip"></span><span class="chip" id="toGo"></span><span class="spacer"></span>' +
@@ -258,7 +282,7 @@
       '<div class="side"><div class="card"><h3>Race</h3><div id="standings"></div></div><div class="card"><h3>Race log</h3><div class="log" id="log"></div></div></div></div></div>');
 
     app.renderer = new Kiri.Renderer(root.querySelector('#track'), root.querySelector('#profile'));
-    app.renderer.setState(race, 0);
+    app.renderer.setState(race, app.myTeam);
     const tip = root.querySelector('#tip');
     app.renderer.onHover = (r, x, y) => {
       if (!r) { tip.hidden = true; return; }
@@ -267,12 +291,15 @@
       tip.style.left = x + 'px';
       tip.style.top = y + 'px';
       tip.innerHTML = '<b>' + (st.id + 1) + ' ' + esc(UI.riderName(st)) + '</b> · ' + esc(app.race.teams[st.team].name) +
-        (app.race.teams[st.team].controller !== 'human' ? ' (' + Kiri.PERSONALITIES[app.race.teams[st.team].controller].name + ')' : '') +
+        ' (' + driverLabel(app.race.teams[st.team]) + ')' +
         '<br>' + C.ARCHETYPES[st.archetype].name + ' · ' + UI.LANE_NAMES[st.lane] + ' · energy ' + st.energy + '/' + st.maxEnergy + ' · strain ' + st.strain + (st.crack ? ' · galloping' : '');
     };
     root.querySelector('#rideBtn').onclick = ride;
     root.querySelector('#quitBtn').onclick = () => {
-      if (confirm('Leave this race? Your progress will be lost.')) { Kiri.Store.clearSave(); titleScreen(); }
+      if (!confirm(app.online ? 'Leave the online race? Your friend will be told.' : 'Leave this race? Your progress will be lost.')) return;
+      if (app.online) leaveOnline('quit');
+      else Kiri.Store.clearSave();
+      titleScreen();
     };
     const mute = root.querySelector('#muteBtn');
     const paintMute = () => { mute.textContent = Kiri.Sound.isMuted() ? '🔇' : '🔊'; };
@@ -305,8 +332,18 @@
       return { id: r.id, square: p.reach, lane: p.lane, label: String(o.effort) };
     });
     app.renderer.setGhosts(ghosts, app.selected);
-    root.querySelector('#rideBtn').disabled = app.busy || race.over;
-    root.querySelector('#hint').textContent = UI.positionHint();
+    const btn = root.querySelector('#rideBtn');
+    const home = humanRiders().every((r) => r.finished);
+    btn.disabled = app.busy || race.over || (app.online && (app.online.locked || home));
+    btn.textContent = app.online && app.online.locked ? 'Locked in ✓' : 'Drive ▶';
+    let hint = UI.positionHint();
+    if (app.online) {
+      const friend = race.teams[1 - app.myTeam].name;
+      if (home) hint = 'Your horses are home. Watching ' + friend + ' finish…';
+      else if (app.online.locked) hint = app.online.friendReady ? 'Both locked in…' : 'Waiting for ' + friend + '…';
+      else hint = app.online.friendReady ? friend + ' has locked in. Your move!' : friend + ' is choosing…';
+    }
+    root.querySelector('#hint').textContent = hint;
   }
 
   function refreshRace() {
@@ -315,16 +352,9 @@
     const mine = humanRiders().filter((r) => !r.finished);
     const best = mine.length ? Math.max.apply(null, mine.map((r) => r.square)) : race.stage.finish;
     root.querySelector('#toGo').textContent = mine.length ? (race.stage.finish - best) * C.SEGMENT_M + ' m to go' : 'Your horses are home';
-    root.querySelector('#standings').innerHTML = UI.standingsTable(race, 0);
-    root.querySelector('#log').innerHTML = UI.logHtml(race, 0);
+    root.querySelector('#standings').innerHTML = UI.standingsTable(race, app.myTeam);
+    root.querySelector('#log').innerHTML = UI.logHtml(race, app.myTeam);
     refreshControls();
-  }
-
-  function aiOrders(state) {
-    const rand = Kiri.rng(app.raceSetup.seed * 1009 + state.turn);
-    const orders = {};
-    for (const t of state.teams) if (t.controller !== 'human') Object.assign(orders, Kiri.chooseOrders(state, t.id, rand, app.difficulty));
-    return orders;
   }
 
   function turnSounds(state) {
@@ -334,17 +364,28 @@
     // The bell rings as the leaders start the last lap.
     const lastLap = state.stage.finish - C.LAP;
     if (entries.some((e) => e.from < lastLap && e.to >= lastLap) && !state.log.some((e) => e.turn < state.turn - 1 && e.to >= lastLap)) Kiri.Sound.play('sprint');
-    if (entries.some((e) => e.cracked && state.riders[e.rider].team === 0)) Kiri.Sound.play('crack');
+    if (entries.some((e) => e.cracked && state.riders[e.rider].team === app.myTeam)) Kiri.Sound.play('crack');
+  }
+
+  function myOrders() {
+    const orders = {};
+    for (const r of humanRiders()) if (!r.finished) orders[r.id] = app.orders[r.id];
+    return orders;
   }
 
   function ride() {
     if (app.busy || app.race.over) return;
+    if (app.online) { lockIn(); return; }
     const prev = app.race;
-    const orders = Object.assign(aiOrders(prev), {});
-    for (const r of humanRiders()) if (!r.finished) orders[r.id] = app.orders[r.id];
+    const orders = Object.assign(Kiri.aiOrdersFor(prev, app.raceSetup.seed, app.difficulty), myOrders());
     const next = Kiri.resolveTurn(prev, orders);
     // Save the resolved turn now, so a reload mid-animation doesn't replay it.
     autosave(next);
+    playTurn(next);
+  }
+
+  // Animate a resolved turn (computed here, or received from the online host).
+  function playTurn(next) {
     app.busy = true;
     Kiri.Sound.play('ride');
     refreshControls();
@@ -356,7 +397,8 @@
       turnSounds(next);
       refreshRace();
       if (next.over) setTimeout(resultsScreen, 900);
-      // Skip ahead automatically once both human riders are home.
+      else if (app.online) onlineAfterTurn();
+      // Skip ahead automatically once both human horses are home.
       else if (humanRiders().every((r) => r.finished)) setTimeout(ride, 250);
     });
   }
@@ -398,14 +440,14 @@
   function teamTable(state, teams) {
     return '<table class="results"><tr><th>#</th><th>Stable</th><th>Drives like</th><th>Earnings</th></tr>' + teams.map((t, i) => {
       const tm = state.teams[t.id];
-      return '<tr class="' + (t.id === 0 ? 'me' : '') + '"><td>' + (i + 1) + '</td><td><span class="mini" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + tm.color + '"></span> ' + esc(tm.name) +
-        '</td><td class="muted">' + (tm.controller === 'human' ? 'You' : Kiri.PERSONALITIES[tm.controller].name) + '</td><td><b>' + UI.euros(t.points) + '</b></td></tr>';
+      return '<tr class="' + (t.id === app.myTeam ? 'me' : '') + '"><td>' + (i + 1) + '</td><td><span class="mini" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + tm.color + '"></span> ' + esc(tm.name) +
+        '</td><td class="muted">' + driverLabel(tm) + '</td><td><b>' + UI.euros(t.points) + '</b></td></tr>';
     }).join('') + '</table>';
   }
 
   // How each of the player's horses spent the race: turns in cover, in the death seat, wide.
   function tripSummary(race) {
-    return race.riders.filter((r) => r.team === 0).map((r) => {
+    return race.riders.filter((r) => r.team === app.myTeam).map((r) => {
       const log = race.log.filter((e) => e.rider === r.id);
       const count = (pred) => log.filter(pred).length;
       const cover = count((e) => e.position === 'cover');
@@ -420,7 +462,7 @@
     const race = app.race;
     const sd = Kiri.standings(race);
     const winner = race.riders[sd.riders[0].id];
-    const myBest = sd.riders.find((row) => race.riders[row.id].team === 0);
+    const myBest = sd.riders.find((row) => race.riders[row.id].team === app.myTeam);
     let tourBlock = '';
     let buttons;
     if (app.tour) {
@@ -431,9 +473,13 @@
       // was recorded, so continuing re-shows this screen with the same totals.
       if (done) Kiri.Store.clearSave();
       tourBlock = '<h2 style="margin:26px 0 10px">' + (done ? 'Final series standings' : 'Series standings after race ' + app.tour.index) + '</h2><div class="two-col"><div class="card">' +
-        resultsTable(race, ts.riders.slice(0, 10), (row) => row.points, 0) + '</div><div class="card">' + teamTable(race, ts.teams) + '</div></div>';
+        resultsTable(race, ts.riders.slice(0, 10), (row) => row.points, app.myTeam) + '</div><div class="card">' + teamTable(race, ts.teams) + '</div></div>';
       buttons = done ? '<button class="btn primary big" data-go="title">Back to menu</button>'
         : '<button class="btn primary big" data-go="next">Race ' + (app.tour.index + 1) + ': ' + esc(app.tour.stages[app.tour.index].name) + ' ▶</button>';
+    } else if (app.online && app.online.role === 'host') {
+      buttons = '<button class="btn primary big" data-go="online-rematch">Rematch with your friend</button><button class="btn" data-go="online-quit">Menu</button>';
+    } else if (app.online) {
+      buttons = '<span class="muted" style="align-self:center">Waiting for the host to start a rematch…</span><button class="btn" data-go="online-quit">Menu</button>';
     } else {
       Kiri.Store.clearSave();
       buttons = '<button class="btn primary big" data-go="rematch">Rematch</button><button class="btn" data-go="custom">New custom race</button><button class="btn" data-go="title">Menu</button>';
@@ -444,12 +490,12 @@
       const r = race.riders[row.id];
       return '<div class="p' + (i + 1) + '"><div class="place">' + (i + 1) + '</div>' + UI.dot(race, r, 30) + '<div><b>' + esc(UI.riderName(r)) + '</b></div><div class="muted small">' + esc(race.teams[r.team].name) + '</div></div>';
     }).join('');
-    const headline = winner.team === 0 ? esc(UI.riderName(winner)) + ' wins for your stable!' : esc(UI.riderName(winner)) + ' wins the ' + esc(race.stage.name);
+    const headline = winner.team === app.myTeam ? esc(UI.riderName(winner)) + ' wins for your stable!' : esc(UI.riderName(winner)) + ' wins the ' + esc(race.stage.name);
     show('<div class="page"><div class="page-head"><div><h1>' + headline + '</h1><div class="muted">Your best horse: ' +
       myBest.place + '. place · ' + race.stage.meters + ' m in ' + (race.turn - 1) + ' turns</div></div></div>' +
       '<div class="podium">' + podium + '</div>' +
       '<div class="card" style="margin-bottom:14px"><h3 style="margin-bottom:6px">Your trip</h3><ul style="margin:0;padding-left:18px">' + tripSummary(race) + '</ul></div>' +
-      '<div class="two-col"><div class="card"><h3 style="margin-bottom:8px">Result</h3>' + resultsTable(race, sd.riders, (row) => row.points, 0) +
+      '<div class="two-col"><div class="card"><h3 style="margin-bottom:8px">Result</h3>' + resultsTable(race, sd.riders, (row) => row.points, app.myTeam) +
       (race.riders.some((r) => r.capped) ? '<div class="muted small">* still on the track at the turn cap</div>' : '') +
       '</div><div class="card"><h3 style="margin-bottom:8px">Stables</h3>' + teamTable(race, sd.teams) + '</div></div>' + tourBlock +
       '<div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap" id="resBtns">' + buttons + '</div></div>');
@@ -458,8 +504,303 @@
       if (go === 'title') titleScreen();
       if (go === 'custom') setupScreen('custom');
       if (go === 'rematch') startRace(app.raceSetup);
+      if (go === 'online-rematch') startOnlineRace();
+      if (go === 'online-quit') { leaveOnline('quit'); titleScreen(); }
       if (go === 'next') startRace(Object.assign({}, app.tourSetup, { stage: app.tour.stages[app.tour.index], seed: app.tour.seed + app.tour.index }));
     });
+  }
+
+  // ---------- Online: two players, host-authoritative ----------
+  const GUEST_COLOR = '#d6336c';
+
+  function onlineScreen() {
+    app.screen = 'online';
+    show('<div class="page"><div class="page-head"><div><h1>Play with a friend</h1><div class="muted">One of you hosts, the other joins with a code. Nothing to install.</div></div>' +
+      '<button class="btn" id="back">← Back</button></div><div class="two-col">' +
+      '<div class="card"><h3 style="margin-bottom:6px">Host a game</h3><p class="muted">Choose the race and your horses. You get a code and a link to send to your friend.</p><button class="btn primary big" id="hostBtn">Host ▶</button></div>' +
+      '<div class="card"><h3 style="margin-bottom:6px">Join a game</h3><p class="muted">Got a code from your friend? Enter it here, or just open the link they sent.</p><button class="btn big" id="joinBtn">Join ▶</button></div>' +
+      '</div><p class="muted small" style="margin-top:16px">The connection goes directly between your browsers (WebRTC). A free public service (PeerJS) only introduces the two browsers to each other.</p></div>');
+    root.querySelector('#back').onclick = titleScreen;
+    root.querySelector('#hostBtn').onclick = () => setupScreen('host');
+    root.querySelector('#joinBtn').onclick = () => joinScreen('');
+  }
+
+  function inviteLink(code) {
+    return location.origin + location.pathname + '?join=' + code;
+  }
+
+  function isLocalAddress() {
+    return location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  }
+
+  function leaveOnline(reason) {
+    const o = app.online;
+    if (!o) return;
+    o.closing = true;
+    try { o.link && o.link.send({ type: 'bye', reason }); } catch (e) { /* already gone */ }
+    setTimeout(() => o.link && o.link.close(), 150);
+    app.online = null;
+    app.myTeam = 0;
+  }
+
+  // A small overlay for connection problems.
+  function banner(text, buttons) {
+    const old = document.getElementById('netBanner');
+    if (old) old.remove();
+    const div = document.createElement('div');
+    div.id = 'netBanner';
+    div.className = 'net-banner';
+    div.innerHTML = '<div>' + text + '</div><div class="net-actions">' + buttons.map((b, i) => '<button class="btn' + (i === 0 ? ' primary' : '') + '" data-i="' + i + '">' + esc(b[0]) + '</button>').join('') + '</div>';
+    div.addEventListener('click', (e) => {
+      const i = e.target.dataset.i;
+      if (i === undefined) return;
+      div.remove();
+      buttons[Number(i)][1]();
+    });
+    document.body.appendChild(div);
+  }
+
+  function onDisconnect() {
+    const o = app.online;
+    if (!o || o.closing) return;
+    if (o.role === 'host' && o.host && app.screen === 'race') {
+      banner('Your friend disconnected.', [
+        ['Continue with AI', () => {
+          o.host.takeOver(1);
+          app.race = o.host.race;
+          app.online = null;
+          app.renderer.setState(app.race, app.myTeam);
+          refreshRace();
+        }],
+        ['Quit', () => { leaveOnline('quit'); titleScreen(); }],
+      ]);
+    } else if (o.role === 'host') {
+      o.guest = null;
+      if (app.screen === 'lobby') renderHostLobby();
+      else banner('Your friend left.', [['Back to menu', () => { leaveOnline('quit'); titleScreen(); }]]);
+    } else {
+      banner('The connection to the host was lost.', [['Back to menu', () => { leaveOnline('quit'); titleScreen(); }]]);
+    }
+  }
+
+  // ----- Host side -----
+  function hostLobby() {
+    app.screen = 'lobby';
+    app.online = { role: 'host', code: null, guest: null, link: null, host: null, locked: false, friendReady: false };
+    show('<div class="page"><h1>Creating your game…</h1><p class="muted">Connecting to the matchmaking service.</p></div>');
+    const o = app.online;
+    Kiri.Net.host(() => Kiri.makeCode(Kiri.rng((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0)), {
+      onReady: (code) => { o.code = code; renderHostLobby(); },
+      onOpen: () => {},
+      onMessage: onHostMessage,
+      onClose: onDisconnect,
+      onError: (type) => {
+        if (app.online !== o) return;
+        show('<div class="page"><h1>Couldn\'t create the game</h1><p class="muted">The online service is not reachable (' + esc(type) + '). Check your internet connection and try again.</p><button class="btn" id="back">← Back</button></div>');
+        root.querySelector('#back').onclick = onlineScreen;
+      },
+    }).then((link) => { o.link = link; }).catch((err) => {
+      show('<div class="page"><h1>Couldn\'t go online</h1><p class="muted">' + esc(err.message) + '</p><button class="btn" id="back">← Back</button></div>');
+      root.querySelector('#back').onclick = onlineScreen;
+    });
+  }
+
+  function renderHostLobby() {
+    const o = app.online;
+    if (!o || app.screen !== 'lobby') return;
+    const s = app.setup;
+    const link = inviteLink(o.code);
+    const race = setupStage();
+    const guest = o.guest
+      ? '<div class="chip good">✓ ' + esc(o.guest.name) + ' joined with ' + o.guest.archetypes.map((a) => C.ARCHETYPES[a].name).join(' + ') + '</div>'
+      : '<div class="muted">Waiting for your friend… <span class="pulse">●</span></div>';
+    show('<div class="page"><div class="page-head"><div><h1>Your game is ready</h1><div class="muted">' + esc(race.name) + ' ' + race.meters + ' m · ' +
+      s.aiTeams + ' AI stable' + (s.aiTeams === 1 ? '' : 's') + ' · ' + Kiri.DIFFICULTY[s.difficulty].name + '</div></div><button class="btn" id="back">Cancel</button></div>' +
+      '<div class="card"><div class="field"><label>Game code</label><div class="game-code">' + o.code + '</div></div>' +
+      '<div class="field"><label>Invite link</label><div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="inviteLink" readonly value="' + esc(link) + '" style="flex:1;min-width:0;width:auto"><button class="btn" id="copyBtn">Copy</button></div>' +
+      (isLocalAddress() ? '<div class="muted small" style="margin-top:6px">⚠ This game runs from your own computer, so the link only works here. Your friend can enter the code on the published game page instead.</div>' : '') +
+      '</div><div class="field"><label>Your friend</label>' + guest + '</div>' +
+      '<button class="btn primary big" id="goBtn"' + (o.guest ? '' : ' disabled') + '>Start the race ▶</button></div></div>');
+    root.querySelector('#back').onclick = () => { leaveOnline('cancel'); onlineScreen(); };
+    root.querySelector('#copyBtn').onclick = () => {
+      const el = root.querySelector('#inviteLink');
+      el.select();
+      const done = () => { root.querySelector('#copyBtn').textContent = 'Copied ✓'; };
+      if (navigator.clipboard) navigator.clipboard.writeText(link).then(done, () => { document.execCommand('copy'); done(); });
+      else { document.execCommand('copy'); done(); }
+    };
+    root.querySelector('#goBtn').onclick = startOnlineRace;
+  }
+
+  function onHostMessage(msg) {
+    const o = app.online;
+    if (!o || !msg || typeof msg !== 'object') return;
+    if (msg.type === 'hello') {
+      const archetypes = (msg.archetypes || []).filter((a) => C.ARCHETYPES[a]).slice(0, 2);
+      while (archetypes.length < 2) archetypes.push('stayer');
+      o.guest = { name: String(msg.name || 'Friend').slice(0, 24), archetypes };
+      o.link.send({ type: 'lobby', host: app.setup.teamName, race: setupStage().name, meters: setupStage().meters, aiTeams: app.setup.aiTeams, difficulty: app.setup.difficulty });
+      renderHostLobby();
+    } else if (msg.type === 'orders' && o.host) {
+      hostHandle(o.host.submit(1, msg.turn, msg.orders));
+    } else if (msg.type === 'bye') {
+      onDisconnect();
+    }
+  }
+
+  function startOnlineRace() {
+    const o = app.online;
+    if (!o || !o.guest) return;
+    const s = app.setup;
+    const seed = Math.floor(Math.random() * 100000);
+    const setup = buildSetup(setupStage(), seed, s.aiTeams);
+    // Guest stable goes second; give it names the AI stables don't use.
+    const used = new Set(setup.teams.flatMap((t) => t.riderNames));
+    const free = HORSE_NAMES.filter((n) => !used.has(n));
+    setup.teams.splice(1, 0, { name: o.guest.name, color: GUEST_COLOR, controller: 'human', archetypes: o.guest.archetypes, riderNames: [free[0], free[1]] });
+    o.host = new Kiri.OnlineHost(setup);
+    o.locked = false;
+    o.friendReady = false;
+    app.raceSetup = setup;
+    app.difficulty = setup.difficulty;
+    app.tour = null;
+    app.race = o.host.race;
+    app.myTeam = 0;
+    app.orders = {};
+    app.selected = null;
+    app.busy = false;
+    defaultOrders();
+    o.link.send({ type: 'start', race: app.race, seed: setup.seed, difficulty: setup.difficulty });
+    raceScreen();
+  }
+
+  // After a submit on the host: tell the guest who is ready, or broadcast the resolved turn.
+  function hostHandle(res) {
+    const o = app.online;
+    if (!o || !res.accepted && !res.resolved) return;
+    if (res.resolved) {
+      o.link.send({ type: 'state', race: res.race });
+      o.locked = false;
+      o.friendReady = false;
+      playTurn(res.race);
+    } else {
+      o.friendReady = o.host.pending[1] !== null;
+      o.link.send({ type: 'ready', turn: o.host.race.turn, ready: o.host.readyStatus() });
+      refreshControls();
+    }
+  }
+
+  // ----- Guest side -----
+  function joinScreen(code) {
+    app.screen = 'join';
+    const s = app.setup;
+    const archOpts = Object.keys(C.ARCHETYPES).map((k) => [k, C.ARCHETYPES[k].name]);
+    show('<div class="page"><div class="page-head"><div><h1>Join a game</h1><div class="muted">Enter the code your friend sent you.</div></div><button class="btn" id="back">← Back</button></div>' +
+      '<div class="setup-grid"><div class="card"><div class="field"><label>Game code</label><input type="text" id="code" maxlength="8" value="' + esc(code) + '" style="width:100%;font-size:22px;letter-spacing:4px;text-transform:uppercase" placeholder="ABC123"></div>' +
+      '<div class="field"><label>Stable name</label><input type="text" id="teamName" maxlength="24" value="' + esc(s.teamName) + '" style="width:100%"></div></div>' +
+      '<div class="card">' + [0, 1].map((i) => '<div class="field"><label>Horse ' + (i + 1) + '</label>' + seg('arch' + i, archOpts, s.archetypes[i]) + '</div>').join('') + '</div></div>' +
+      '<div id="joinStatus" class="muted" style="margin-top:12px"></div><div style="margin-top:14px;text-align:right"><button class="btn primary big" id="joinGo">Join ▶</button></div></div>');
+    root.querySelector('#back').onclick = () => { leaveOnline('cancel'); history.replaceState(null, '', location.pathname); onlineScreen(); };
+    root.querySelectorAll('[data-seg]').forEach((el) => el.addEventListener('click', (e) => {
+      const v = e.target.dataset.v;
+      if (v === undefined) return;
+      s.archetypes[el.dataset.seg === 'arch0' ? 0 : 1] = v;
+      s.teamName = root.querySelector('#teamName').value;
+      joinScreen(root.querySelector('#code').value);
+    }));
+    root.querySelector('#joinGo').onclick = () => {
+      const c = Kiri.normalizeCode(root.querySelector('#code').value);
+      s.teamName = root.querySelector('#teamName').value.trim() || 'Talli Sisu';
+      const status = root.querySelector('#joinStatus');
+      if (c.length !== 6) { status.textContent = 'The code has 6 characters.'; return; }
+      status.textContent = 'Connecting…';
+      root.querySelector('#joinGo').disabled = true;
+      connectAsGuest(c, status);
+    };
+  }
+
+  function connectAsGuest(code, status) {
+    leaveOnline('retry');
+    const o = { role: 'guest', code, link: null, locked: false, friendReady: false };
+    app.online = o;
+    let opened = false;
+    Kiri.Net.join(code, {
+      onOpen: () => {
+        opened = true;
+        o.link.send({ type: 'hello', name: app.setup.teamName, archetypes: app.setup.archetypes });
+        if (status) status.innerHTML = '<span class="chip good">✓ Connected</span> Waiting for the host to start the race…';
+      },
+      onMessage: onGuestMessage,
+      onClose: onDisconnect,
+      onError: (type) => {
+        if (app.online !== o) return;
+        app.online = null;
+        if (app.screen === 'join') {
+          const el = root.querySelector('#joinStatus');
+          el.innerHTML = type === 'notfound' ? '<b>Game not found.</b> Check the code. Your friend must keep the game page open.' : 'Connection failed (' + esc(type) + '). Try again.';
+          root.querySelector('#joinGo').disabled = false;
+        } else if (!opened || app.screen === 'race') onDisconnect();
+      },
+    }).then((link) => { o.link = link; }).catch((err) => {
+      app.online = null;
+      if (status) status.textContent = err.message;
+      const b = root.querySelector('#joinGo');
+      if (b) b.disabled = false;
+    });
+  }
+
+  function onGuestMessage(msg) {
+    const o = app.online;
+    if (!o || !msg || typeof msg !== 'object') return;
+    if (msg.type === 'lobby') {
+      const st = root.querySelector('#joinStatus');
+      if (st) st.innerHTML = '<span class="chip good">✓ Connected to ' + esc(msg.host) + '</span> ' + esc(msg.race) + ' ' + msg.meters + ' m · ' + msg.aiTeams + ' AI stables · ' +
+        esc(Kiri.DIFFICULTY[msg.difficulty] ? Kiri.DIFFICULTY[msg.difficulty].name : '') + '. Waiting for the host to start…';
+    } else if (msg.type === 'start') {
+      app.race = msg.race;
+      app.raceSetup = { seed: msg.seed, difficulty: msg.difficulty };
+      app.difficulty = msg.difficulty;
+      app.tour = null;
+      app.myTeam = 1;
+      app.orders = {};
+      app.selected = null;
+      app.busy = false;
+      o.locked = false;
+      o.friendReady = false;
+      defaultOrders();
+      history.replaceState(null, '', location.pathname);
+      raceScreen();
+    } else if (msg.type === 'ready') {
+      if (msg.turn !== app.race.turn) return;
+      o.friendReady = !!msg.ready[0];
+      refreshControls();
+    } else if (msg.type === 'state') {
+      if (!msg.race || msg.race.turn <= app.race.turn) return; // late duplicate
+      o.locked = false;
+      o.friendReady = false;
+      playTurn(msg.race);
+    } else if (msg.type === 'bye') {
+      onDisconnect();
+    }
+  }
+
+  // ----- Both sides -----
+  function lockIn() {
+    const o = app.online;
+    if (o.locked || humanRiders().every((r) => r.finished)) return;
+    o.locked = true;
+    refreshControls();
+    if (o.role === 'host') hostHandle(o.host.submit(0, app.race.turn, myOrders()));
+    else o.link.send({ type: 'orders', turn: app.race.turn, orders: myOrders() });
+  }
+
+  // When both players' horses are home, the host keeps the AI horses running on its own.
+  function onlineAfterTurn() {
+    const o = app.online;
+    if (o.role !== 'host' || !o.host) return;
+    if (o.host.readyStatus()[0] && o.host.readyStatus()[1] && !o.host.pending[0] && !o.host.pending[1]) {
+      setTimeout(() => { if (app.online === o && !app.busy) hostHandle(o.host.tryResolve()); }, 300);
+    }
   }
 
   // ---------- Rules ----------
@@ -493,6 +834,9 @@
     root.querySelector('#back').onclick = () => { if (prevScreen === 'race') raceScreen(); else back(); };
   }
 
-  titleScreen();
+  // An invite link (?join=CODE) opens the join screen directly.
+  const joinCode = Kiri.normalizeCode(new URLSearchParams(location.search).get('join'));
+  if (joinCode.length === 6) joinScreen(joinCode);
+  else titleScreen();
   window.KiriApp = app;
 })(window.Kiri = window.Kiri || {});

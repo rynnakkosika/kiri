@@ -24,9 +24,12 @@ Rationale: deterministic rules make bugs reproducible, bots testable and races r
 ### III. Zero-Install Play
 
 The game MUST run in a current desktop browser from static files, with no build step, package
-manager or server-side code. Third-party runtime dependencies are not allowed.
+manager or server-side code. Third-party runtime dependencies are not allowed, with one
+exception: the optional online mode MAY load a single version-pinned library from a public CDN.
+It MUST load only when the player opens the online menu, and offline play MUST never depend on it.
 
-Rationale: the player opens a page and plays; nothing to install or break.
+Rationale: the player opens a page and plays; nothing to install or break. Playing with a friend
+elsewhere needs WebRTC signalling, which the players can't host themselves.
 
 ### IV. Tested Rules
 
@@ -49,8 +52,8 @@ Rationale: a tactical game is only fun when the player understands why things ha
 - Language: modern JavaScript loaded as classic scripts under a `Kiri` namespace (so the game
   opens from `file://`), HTML and CSS only.
 - Rendering: HTML5 canvas for the track; plain DOM for controls.
-- Engine code under `src/engine/`, AI under `src/ai/`, UI under `src/ui/`; UI may use the
-  engine, never the reverse.
+- Engine code under `src/engine/`, AI under `src/ai/`, networking under `src/net/`, UI under
+  `src/ui/`; UI and networking may use the engine, never the reverse.
 - A full AI turn MUST complete in under 100 ms on a mid-range laptop.
 
 ## Development Workflow
@@ -67,4 +70,4 @@ sections, PATCH for wording) and updating the Last Amended date. Every plan MUST
 Constitution Check against these principles, and any violation MUST be justified in that plan's
 Complexity Tracking table.
 
-**Version**: 1.1.0 | **Ratified**: 2026-11-02 | **Last Amended**: 2026-11-03
+**Version**: 1.2.0 | **Ratified**: 2026-11-02 | **Last Amended**: 2026-11-03
