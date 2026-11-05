@@ -45,6 +45,14 @@ speeds and lanes, and the turn runs when both of you have locked in. AI stables 
 
 Keyboard: <kbd>1</kbd>–<kbd>9</kbd> speed, <kbd>←</kbd>/<kbd>→</kbd> inside/outside, <kbd>Tab</kbd> switch horse, <kbd>Enter</kbd> drive.
 
+## Install on a phone
+
+- **From the web (any phone):** open <https://rynnakkosika.github.io/kiri/> and choose
+  **Add to Home screen** (Android: browser menu → *Install app*). It then opens like an app and
+  plays offline. Only *Play with a friend* needs a connection.
+- **Android app:** the `mobile/` folder wraps the same files with [Capacitor](https://capacitorjs.com)
+  for Google Play. The game itself still needs no build; see `mobile/README.md`.
+
 ## Tests
 
 Open `tests/index.html`. It runs the rule tests, the AI tests and a 100-race balance simulation
@@ -64,6 +72,11 @@ Then open <http://localhost:8765/>.
 | `src/ai/bots.js` | AI driving styles: Steady, Pocket sitter, Front runner, Tactician. |
 | `src/net/` | Online play: pure host protocol (`protocol.js`) and PeerJS transport (`peer.js`). |
 | `src/ui/` | Oval renderer, horse cards, screens, storage, sound. |
+| `src/ui/native.js` | Optional platform glue: offline service worker on the web, Android back button in the app. |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Installable web app (PWA). |
+| `privacy.html` | Privacy policy (linked from the Play Store listing). |
+| `mobile/` | Android wrapper for Google Play (Capacitor). Not needed to play. |
+| `store/` | Play Store texts, screenshots and graphics. |
 | `tests/` | Browser test runner and suites. |
 | `specs/` | Spec Kit features: 001 the cycling original, 002 game feel, 003 harness racing, 004 online play. |
 | `.specify/memory/constitution.md` | Project principles. |

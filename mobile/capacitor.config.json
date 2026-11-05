@@ -1,0 +1,8 @@
+{
+  "appId": "io.github.rynnakkosika.kiri",
+  "appName": "Kiri",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#d9481c"
+  }
+}

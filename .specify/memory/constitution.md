@@ -28,8 +28,15 @@ manager or server-side code. Third-party runtime dependencies are not allowed, w
 exception: the optional online mode MAY load a single version-pinned library from a public CDN.
 It MUST load only when the player opens the online menu, and offline play MUST never depend on it.
 
+Store packaging is the one place a package manager is allowed: the `mobile/` folder MAY use npm
+and Capacitor to wrap a copy of the game for Google Play. The game files MUST NOT depend on it,
+and `index.html` MUST keep working from `file://` without it. Platform code (service worker,
+Android back button) lives in `src/ui/native.js`, does nothing where it doesn't apply, and the
+game MUST work without it.
+
 Rationale: the player opens a page and plays; nothing to install or break. Playing with a friend
-elsewhere needs WebRTC signalling, which the players can't host themselves.
+elsewhere needs WebRTC signalling, which the players can't host themselves. A store app is a
+wrapper, not a second codebase.
 
 ### IV. Tested Rules
 
@@ -53,7 +60,8 @@ Rationale: a tactical game is only fun when the player understands why things ha
   opens from `file://`), HTML and CSS only.
 - Rendering: HTML5 canvas for the track; plain DOM for controls.
 - Engine code under `src/engine/`, AI under `src/ai/`, networking under `src/net/`, UI under
-  `src/ui/`; UI and networking may use the engine, never the reverse.
+  `src/ui/`; UI and networking may use the engine, never the reverse. The Android wrapper lives
+  under `mobile/` and store material under `store/`.
 - A full AI turn MUST complete in under 100 ms on a mid-range laptop.
 
 ## Development Workflow
@@ -70,4 +78,4 @@ sections, PATCH for wording) and updating the Last Amended date. Every plan MUST
 Constitution Check against these principles, and any violation MUST be justified in that plan's
 Complexity Tracking table.
 
-**Version**: 1.2.0 | **Ratified**: 2026-11-02 | **Last Amended**: 2026-11-03
+**Version**: 1.3.0 | **Ratified**: 2026-11-02 | **Last Amended**: 2026-11-05

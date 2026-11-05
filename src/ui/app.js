@@ -526,10 +526,13 @@
   }
 
   function inviteLink(code) {
+    // Inside the Android app the page lives at https://localhost, so invite friends to the web version.
+    if (Kiri.isNative) return Kiri.PUBLIC_URL + '?join=' + code;
     return location.origin + location.pathname + '?join=' + code;
   }
 
   function isLocalAddress() {
+    if (Kiri.isNative) return false;
     return location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   }
 

@@ -1,0 +1,26 @@
+{
+  "name": "kiri-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Android (Google Play) wrapper for Kiri. The game itself needs no build; this folder only packages it.",
+  "type": "module",
+  "scripts": {
+    "images": "node scripts/render-images.mjs && npx capacitor-assets generate --android --splashBackgroundColor #d9481c --splashBackgroundColorDark #d9481c",
+    "web": "node scripts/copy-web.mjs",
+    "sync": "node scripts/copy-web.mjs && npx cap sync android",
+    "apk": "npm run sync && cd android && gradlew.bat assembleDebug",
+    "bundle": "npm run sync && cd android && gradlew.bat bundleRelease",
+    "open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "4.0.0",
+    "@capacitor/cli": "8.6.0",
+    "puppeteer-core": "25.16.0",
+    "sharp": "0.35.5"
+  }
+}

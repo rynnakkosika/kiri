@@ -1,0 +1,10 @@
+node_modules/
+www/
+dist/
+# Signing secrets: never commit these. Back them up somewhere safe instead.
+keys/
+android/keystore.properties
+android/app/release/
+android/app/build/
+android/build/
+android/.gradle/
