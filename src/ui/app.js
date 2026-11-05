@@ -9,9 +9,9 @@
   const TEAM_NAMES = ['Talli Pohjola', 'Revontulen Talli', 'Kalevan Kavio', 'Saimaan Ravi', 'Lapin Ravitalli'];
   const TEAM_COLORS = ['#2f6fdf', '#1f9d57', '#8e44ad', '#d4a106', '#0f8f8f'];
   const HUMAN_COLOR = '#e4572e';
-  const HORSE_NAMES = ['Tähtisade', 'Myrskyn Poika', 'Salamaveikko', 'Tuulen Tytär', 'Kultakavio', 'Revontuli', 'Pikku Ukkonen', 'Hopeasiipi',
-    'Routaprinssi', 'Sisun Liekki', 'Kesäheila', 'Pohjantähti', 'Usvan Neito', 'Rautatamma', 'Hallan Valo', 'Kaamosveli',
-    'Aallon Ruhtinas', 'Leimuava', 'Kipinätär', 'Jäähile'];
+  const HORSE_NAMES = ['Starfall', 'Storm Son', 'Lightning Lad', 'Wind Daughter', 'Golden Hoof', 'Northern Light', 'Little Thunder', 'Silverwing',
+    'Frost Prince', 'Steady Flame', 'Summer Fling', 'North Star', 'Mist Maiden', 'Iron Mare', 'Frostlight', 'Dark Winter',
+    'Wave Prince', 'Blazing Dawn', 'Sparkle', 'Ice Crystal'];
   const DIFFICULTY_BLURB = {
     easy: 'Rivals misjudge their pace and make their run late. Good for learning.',
     normal: 'A mixed field of all four driving styles.',
