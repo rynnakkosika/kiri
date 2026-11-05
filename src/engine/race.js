@@ -80,11 +80,25 @@
       const p = pre[r.id];
       taken.get(r.square).delete(r.lane);
       const allowed = Kiri.allowedLanes(r, startSpots.filter((x) => x.id !== r.id));
+      const free = (q, l) => !(taken.get(q) || new Set()).has(l);
       let sq = p.reach;
       let lane = -1;
-      for (; sq >= r.square; sq--) {
-        lane = Kiri.pickLane(allowed, p.lane, taken.get(sq) || new Set());
-        if (lane >= 0) break;
+      if (p.lane < r.lane) {
+        // Moving inside: take the inner lane at the reach, or one segment back (in cover behind
+        // the horse that got there first). Otherwise keep the current lane; never drift outward.
+        for (const q of [p.reach, p.reach - 1]) {
+          if (q >= r.square && free(q, p.lane)) { sq = q; lane = p.lane; break; }
+        }
+        if (lane < 0) {
+          for (sq = p.reach; sq >= r.square; sq--) {
+            if (free(sq, r.lane)) { lane = r.lane; break; }
+          }
+        }
+      } else {
+        for (; sq >= r.square; sq--) {
+          lane = Kiri.pickLane(allowed, p.lane, taken.get(sq) || new Set());
+          if (lane >= 0) break;
+        }
       }
       if (lane < 0) { sq = r.square; lane = r.lane; }
       const blocked = sq < p.reach;

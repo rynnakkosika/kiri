@@ -44,6 +44,18 @@ describe('Rule 6–7 — resolution, blocking and lanes', () => {
     expect(n.riders[2].square).toBe(9);
     expect(n.log.find((e) => e.rider === 2).notes.includes('boxed in')).toBe(true);
   });
+  it('moving inside onto a taken spot tucks in one segment back, in cover', () => {
+    // Horse 0 trots onto (10, rail). Horse 1 asks for the rail and reaches 10 too.
+    const s = makeState(st, [rider({ square: 9, lane: 0 }), rider({ square: 5, lane: 1 })]);
+    const n = Kiri.resolveTurn(s, { 0: { effort: 1 }, 1: { effort: 5, lane: -1 } });
+    expect([n.riders[1].square, n.riders[1].lane]).toEqual([9, 0]);
+  });
+  it('moving inside never pushes the horse further out', () => {
+    // (10, rail), (10, lane 2) and (9, rail) end up taken: horse 3 stays in lane 2 at 9.
+    const s = makeState(st, [rider({ square: 9, lane: 0 }), rider({ square: 9, lane: 1 }), rider({ square: 8, lane: 0 }), rider({ square: 5, lane: 1 })]);
+    const n = Kiri.resolveTurn(s, { 0: { effort: 1 }, 1: { effort: 1 }, 2: { effort: 1 }, 3: { effort: 5, lane: -1 } });
+    expect([n.riders[3].square, n.riders[3].lane]).toEqual([9, 1]);
+  });
   it('a free outside lets the horse pull out', () => {
     const s = makeState(st, [rider({ square: 6, lane: 0 }), rider({ square: 5, lane: 0 })]);
     const n = Kiri.resolveTurn(s, { 0: { effort: 4 }, 1: { effort: 6, lane: 1 } });
