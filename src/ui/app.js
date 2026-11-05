@@ -6,7 +6,7 @@
   const esc = UI.esc;
   const root = document.getElementById('app');
 
-  const TEAM_NAMES = ['Talli Pohjola', 'Revontulen Talli', 'Kalevan Kavio', 'Saimaan Ravi', 'Lapin Ravitalli'];
+  const TEAM_NAMES = ['North Wind Stable', 'Aurora Stables', 'Iron Hoof Racing', 'Lakeside Trotters', 'Arctic Stable'];
   const TEAM_COLORS = ['#2f6fdf', '#1f9d57', '#8e44ad', '#d4a106', '#0f8f8f'];
   const HUMAN_COLOR = '#e4572e';
   const HORSE_NAMES = ['Starfall', 'Storm Son', 'Lightning Lad', 'Wind Daughter', 'Golden Hoof', 'Northern Light', 'Little Thunder', 'Silverwing',
@@ -22,7 +22,7 @@
   const app = {
     screen: 'title',
     setup: {
-      stage: 1, seed: 42, aiTeams: 5, archetypes: ['stayer', 'closer'], teamName: 'Talli Sisu',
+      stage: 1, seed: 42, aiTeams: 5, archetypes: ['stayer', 'closer'], teamName: 'Grit Stable',
       difficulty: Kiri.Store.prefs().difficulty,
     },
     difficulty: 'normal',
@@ -136,7 +136,7 @@
     root.querySelector('#teamName').addEventListener('input', (e) => { s.teamName = e.target.value; });
     drawStagePreview();
     root.querySelector('#start').onclick = () => {
-      s.teamName = root.querySelector('#teamName').value.trim() || 'Talli Sisu';
+      s.teamName = root.querySelector('#teamName').value.trim() || 'Grit Stable';
       if (tour) { startTour(); return; }
       if (hosting) { hostLobby(); return; }
       app.tour = null;
@@ -201,7 +201,7 @@
     const seed = Math.floor(Math.random() * 100000);
     app.tour = null;
     // A full field: you plus five AI stables, 12 horses (spec 006).
-    startRace(buildSetup(Kiri.PRESET_STAGES[1], seed, 5, ['stayer', 'closer'], 'Talli Sisu'));
+    startRace(buildSetup(Kiri.PRESET_STAGES[1], seed, 5, ['stayer', 'closer'], 'Grit Stable'));
   }
 
   function startTour() {
@@ -737,7 +737,7 @@
     }));
     root.querySelector('#joinGo').onclick = () => {
       const c = Kiri.normalizeCode(root.querySelector('#code').value);
-      s.teamName = root.querySelector('#teamName').value.trim() || 'Talli Sisu';
+      s.teamName = root.querySelector('#teamName').value.trim() || 'Grit Stable';
       const status = root.querySelector('#joinStatus');
       if (c.length !== 6) { status.textContent = 'The code has 6 characters.'; return; }
       status.textContent = 'Connecting…';
