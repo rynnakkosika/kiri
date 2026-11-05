@@ -9,7 +9,7 @@
       <circle cx="564" cy="347" r="15"/><circle cx="641" cy="387" r="15"/><circle cx="700" cy="472" r="15"/>
     </g>
   </g>
-  <text x="480" y="235" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="120" letter-spacing="14" fill="#f4f1ea">KIRI</text>
+  <text x="480" y="235" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="80" letter-spacing="4" fill="#f4f1ea">TRAVBANA</text>
   <text x="484" y="300" font-family="Segoe UI, Arial, sans-serif" font-weight="600" font-size="34" fill="#f4f1ea">Tactical harness racing</text>
   <text x="484" y="345" font-family="Segoe UI, Arial, sans-serif" font-size="26" fill="#f4f1ea" fill-opacity=".85">Sit in cover. Time your drive.</text>
 </svg>

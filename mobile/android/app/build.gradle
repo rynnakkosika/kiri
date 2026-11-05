@@ -8,10 +8,10 @@ if (keystorePropsFile.exists()) {
 }
 
 android {
-    namespace = "io.github.rynnakkosika.kiri"
+    namespace = "io.github.rynnakkosika.travbana"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "io.github.rynnakkosika.kiri"
+        applicationId "io.github.rynnakkosika.travbana"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

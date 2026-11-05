@@ -22,8 +22,11 @@
         });
       });
     });
+    if (riders.length > C.FIELD_MAX) throw new Error('At most ' + C.FIELD_MAX + ' horses in a race');
     // Autostart: rows of four behind the start line, post positions drawn by seed.
+    // Post 1 is the rail in the front row, 5–8 the second row, 9–12 the third.
     rand.shuffle(riders.map((r) => r.id)).forEach((id, i) => {
+      riders[id].post = i + 1;
       riders[id].square = -1 - Math.floor(i / C.LANES);
       riders[id].lane = i % C.LANES;
     });

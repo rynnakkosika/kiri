@@ -1,4 +1,4 @@
-# Kiri
+# Travbana
 
 A turn-based tactical harness racing (trotting) game that runs in the browser. You drive two
 trotters from your stable against up to five AI stables on a 1000 m oval. Each turn every horse
@@ -19,7 +19,8 @@ reasoning through a race. The rules here are original.
 
 Open `index.html` in a browser. Double-clicking it works, with no install or build step.
 
-- **Quick race**: Classic 2100 m against 3 AI stables.
+- **Quick race**: Classic 2100 m, a full field of 12 horses against 5 AI stables.
+- **Post draw**: posts 1–12 are drawn by lot before every race and shown before the start.
 - **Custom race**: pick the distance (Mile 1609 m, Classic 2100 m, Long 2600 m or a seeded random one),
   the number of AI stables, the difficulty, your horses' types and your stable name.
 - **Series**: three races, with prize money added up across them.
@@ -69,6 +70,7 @@ Then open <http://localhost:8765/>.
 | Path | What |
 |------|------|
 | `src/engine/` | Pure, seeded rules engine (no DOM). `constants.js` holds every balance number. |
+| `src/engine/elo.js` | Ladder rating: multi-stable Elo, shown as money (1000 Elo = 10.00). |
 | `src/ai/bots.js` | AI driving styles: Steady, Pocket sitter, Front runner, Tactician. |
 | `src/net/` | Online play: pure host protocol (`protocol.js`) and PeerJS transport (`peer.js`). |
 | `src/ui/` | Oval renderer, horse cards, screens, storage, sound. |
@@ -78,5 +80,5 @@ Then open <http://localhost:8765/>.
 | `mobile/` | Android wrapper for Google Play (Capacitor). Not needed to play. |
 | `store/` | Play Store texts, screenshots and graphics. |
 | `tests/` | Browser test runner and suites. |
-| `specs/` | Spec Kit features: 001 the cycling original, 002 game feel, 003 harness racing, 004 online play. |
+| `specs/` | Spec Kit features: 001 the cycling original, 002 game feel, 003 harness racing, 004 online play, 006 Travbana: 12-horse field, post draw, Elo ladder. |
 | `.specify/memory/constitution.md` | Project principles. |

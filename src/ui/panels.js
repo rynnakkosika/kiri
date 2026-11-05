@@ -92,7 +92,7 @@
 
   function head(state, r, arch, chips) {
     return '<div class="rc-head">' + dot(state, r) + '<div><div class="rc-name">' + esc(riderName(r)) + '</div>' +
-      '<div class="muted small" title="' + esc(arch.blurb) + '">' + arch.name + ' · ' + LANE_NAMES[r.lane] + '</div></div><div class="rc-chips">' + chips + '</div></div>';
+      '<div class="muted small" title="' + esc(arch.blurb) + '">' + arch.name + (r.post ? ' · post ' + r.post : '') + ' · ' + LANE_NAMES[r.lane] + '</div></div><div class="rc-chips">' + chips + '</div></div>';
   }
 
   function standingsTable(state, human) {

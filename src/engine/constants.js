@@ -1,4 +1,4 @@
-// Every balance number in Kiri lives here (constitution: tuning never touches logic).
+// Every balance number in Travbana lives here (constitution: tuning never touches logic).
 (function (Kiri) {
   'use strict';
 
@@ -44,6 +44,13 @@
     EXHAUSTED_MAX_EFFORT: 3,
 
     PURSE: [10000, 5000, 2500, 1500, 1000, 800, 600, 400],
+
+    // A full field: 4 lanes × 3 rows behind the autostart gate (spec 006).
+    FIELD_MAX: 12,
+    // Ladder (spec 006): Elo starts at 1000 and is shown as money, 100 Elo = 1.00.
+    ELO_START: 1000,
+    ELO_K: 32,
+    ELO_PER_MONEY: 100,
     TURN_CAP: 60,
     RUNOFF: 14,
   });

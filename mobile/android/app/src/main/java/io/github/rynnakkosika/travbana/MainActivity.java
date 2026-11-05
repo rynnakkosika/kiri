@@ -1,4 +1,4 @@
-package io.github.rynnakkosika.kiri;
+package io.github.rynnakkosika.travbana;
 
 import com.getcapacitor.BridgeActivity;
 

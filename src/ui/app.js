@@ -22,7 +22,7 @@
   const app = {
     screen: 'title',
     setup: {
-      stage: 1, seed: 42, aiTeams: 3, archetypes: ['stayer', 'closer'], teamName: 'Talli Sisu',
+      stage: 1, seed: 42, aiTeams: 5, archetypes: ['stayer', 'closer'], teamName: 'Talli Sisu',
       difficulty: Kiri.Store.prefs().difficulty,
     },
     difficulty: 'normal',
@@ -59,7 +59,7 @@
         (save.tour ? ' (series race ' + (save.tour.index + 1) + '/3)' : '') + (save.race.over ? ', results' : ', turn ' + save.race.turn) + '</button>'
       : '';
     show('<div class="title-screen"><div class="title-card">' +
-      '<div class="logo">KIR<span>I</span></div>' +
+      '<div class="logo">TRAVBAN<span>A</span></div>' +
       '<div class="tagline">Harness racing on the oval. Sit in cover, stay out of the death seat, and time your drive for home.</div>' +
       '<div class="menu">' + cont +
       '<button class="btn' + (save ? '' : ' primary') + '" data-go="quick">Quick race</button>' +
@@ -200,7 +200,8 @@
   function startQuick() {
     const seed = Math.floor(Math.random() * 100000);
     app.tour = null;
-    startRace(buildSetup(Kiri.PRESET_STAGES[1], seed, 3, ['stayer', 'closer'], 'Talli Sisu'));
+    // A full field: you plus five AI stables, 12 horses (spec 006).
+    startRace(buildSetup(Kiri.PRESET_STAGES[1], seed, 5, ['stayer', 'closer'], 'Talli Sisu'));
   }
 
   function startTour() {
@@ -221,7 +222,30 @@
     app.busy = false;
     defaultOrders();
     autosave();
-    raceScreen();
+    drawScreen();
+  }
+
+  // The post draw (spec 006): every horse's post position before the start, yours highlighted.
+  function drawScreen() {
+    app.screen = 'draw';
+    const race = app.race;
+    const rows = race.riders.slice().sort((a, b) => a.post - b.post).map((r) => {
+      const team = race.teams[r.team];
+      const mine = r.team === app.myTeam;
+      return '<tr class="' + (mine ? 'mine' : '') + '"><td class="post-no">' + r.post + '</td><td>' + UI.dot(race, r) + ' ' + esc(UI.riderName(r)) +
+        '</td><td class="muted">' + esc(team.name) + (mine ? ' <span class="chip good">You</span>' : '') + '</td></tr>';
+    });
+    const rowName = ['Front row', 'Second row', 'Third row'];
+    let body = '';
+    for (let i = 0; i < rows.length; i += C.LANES) {
+      body += '<tr class="row-head"><td colspan="3">' + rowName[i / C.LANES] + '</td></tr>' + rows.slice(i, i + C.LANES).join('');
+    }
+    show('<div class="page"><div class="page-head"><div><h1>Post draw</h1><div class="muted">' + esc(race.stage.name) + ' ' + race.stage.meters + ' m · ' +
+      race.riders.length + ' horses · autostart</div></div></div>' +
+      '<div class="card"><p class="muted small" style="margin-top:0">Posts were drawn by lot. Post 1 starts on the rail in the front row; the back rows start a length behind.</p>' +
+      '<table class="draw-table">' + body + '</table></div>' +
+      '<button class="btn primary big" id="goBtn" style="margin-top:16px">To the start ▶</button></div>');
+    root.querySelector('#goBtn').onclick = raceScreen;
   }
 
   function autosave(race) {
@@ -270,7 +294,7 @@
     const tourLabel = (app.tour ? '<span class="chip">Series race ' + (app.tour.index + 1) + '/3</span>' : '') +
       (friend ? '<span class="chip good">🌐 Online vs ' + esc(friend.name) + '</span>' : '');
     show('<div class="race">' +
-      '<div class="topbar"><span class="logo-sm">KIR<span>I</span></span><span class="stage-name">' + esc(race.stage.name) + ' ' + race.stage.meters + ' m</span>' + tourLabel +
+      '<div class="topbar"><span class="logo-sm">TRAVBAN<span>A</span></span><span class="stage-name">' + esc(race.stage.name) + ' ' + race.stage.meters + ' m</span>' + tourLabel +
       '<span class="chip">' + Kiri.DIFFICULTY[app.difficulty].name + '</span><span class="chip" id="turnChip"></span><span class="chip" id="toGo"></span><span class="spacer"></span>' +
       '<button class="btn" id="muteBtn" title="Sound on/off"></button><button class="btn" id="rulesBtn">Rules</button><button class="btn" id="quitBtn">Quit</button></div>' +
       '<div class="track-wrap"><canvas id="track"></canvas><div class="tooltip" id="tip" hidden></div></div>' +

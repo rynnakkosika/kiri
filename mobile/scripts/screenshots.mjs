@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'store', 'screenshots');
 mkdirSync(out, { recursive: true });
-const URL = process.env.KIRI_URL || 'http://localhost:8765/';
+const URL = process.env.TRAVBANA_URL || 'http://localhost:8765/';
 const EDGE = process.env.BROWSER || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
 const browser = await puppeteer.launch({ executablePath: EDGE, headless: true });
@@ -22,7 +22,10 @@ await shot('1-title.png');
 
 await page.click('[data-go="quick"]');
 await wait(800);
-await shot('2-race-start.png');
+await shot('2-post-draw.png');
+await page.click('#goBtn');
+await wait(800);
+await shot('2b-race-start.png');
 
 for (let i = 0; i < 6; i++) { await page.keyboard.press('Enter'); await wait(1500); }
 await shot('3-race-mid.png');

@@ -1,4 +1,4 @@
-# Kiri for Android
+# Travbana for Android
 
 This folder packages the game for Google Play with [Capacitor](https://capacitorjs.com).
 The game files live one folder up and still run without any build. Here they're only copied

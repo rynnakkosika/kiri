@@ -1,6 +1,6 @@
 {
-  "appId": "io.github.rynnakkosika.kiri",
-  "appName": "Kiri",
+  "appId": "io.github.rynnakkosika.travbana",
+  "appName": "Travbana",
   "webDir": "www",
   "android": {
     "backgroundColor": "#d9481c"
